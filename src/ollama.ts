@@ -21,7 +21,9 @@ export async function getModels(): Promise<string[]> {
     const res = await fetch("http://127.0.0.1:11434/api/tags");
     if (!res.ok) return [DEFAULT_MODEL];
     const data = await res.json();
-    return data.models.map((m: any) => m.name);
+    return data.models
+      .map((m: any) => m.name)
+      .filter((name: string) => !name.toLowerCase().includes("embed"));
   } catch (e) {
     return [DEFAULT_MODEL]; // Fallback to default if offline
   }
