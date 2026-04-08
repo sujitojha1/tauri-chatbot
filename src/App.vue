@@ -139,6 +139,22 @@ const sendMessage = async () => {
           <span class="truncate block w-full">{{ fileName }}</span>
         </div>
       </div>
+      
+      <div class="p-4 border-t border-neutral-100 bg-white/50 backdrop-blur-sm">
+        <label 
+          class="cursor-pointer text-sm px-4 py-2 w-full rounded-md bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition-colors shadow-sm flex items-center justify-center gap-2"
+          :class="{'opacity-50 pointer-events-none': isIngesting}"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span v-if="!isIngesting" class="font-medium text-neutral-600">Ingest File</span>
+          <span v-else class="font-medium text-neutral-600">Indexing...</span>
+          <input type="file" class="hidden" @change="handleFileUpload" accept=".txt,.md,.pdf,.csv,.json" :disabled="isIngesting" />
+        </label>
+      </div>
     </aside>
 
     <main class="flex flex-1 flex-col h-full overflow-hidden relative">
@@ -149,19 +165,6 @@ const sendMessage = async () => {
         <h1 class="font-semibold tracking-wide text-lg text-neutral-800 font-mono">{{ selectedModel }}</h1>
       </div>
       <div class="flex items-center gap-4">
-        <label 
-          class="cursor-pointer text-sm px-4 py-2 rounded-md bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition-colors shadow-sm flex items-center gap-2"
-          :class="{'opacity-50 pointer-events-none': isIngesting}"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-          </svg>
-          <span v-if="!isIngesting" class="font-medium text-neutral-600 block sm:hidden md:block">Ingest File</span>
-          <span v-else class="font-medium text-neutral-600 block sm:hidden md:block">Indexing...</span>
-          <input type="file" class="hidden" @change="handleFileUpload" accept=".txt,.md,.pdf,.csv,.json" :disabled="isIngesting" />
-        </label>
         <select 
           v-model="selectedModel" 
           class="text-sm px-3 py-1.5 rounded-md bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer pr-8 relative shadow-sm"

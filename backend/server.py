@@ -24,6 +24,8 @@ if not os.path.exists(WORKING_DIR):
 # Global variables to retain RAG instance
 _rag_instances = {}
 
+from lightrag.utils import EmbeddingFunc
+
 def get_rag(model_name: str):
     if model_name in _rag_instances:
         return _rag_instances[model_name]
@@ -33,9 +35,11 @@ def get_rag(model_name: str):
         llm_model_func=ollama_model_complete,
         llm_model_name=model_name,
         llm_model_max_async=2,
-        llm_model_max_token_size=32768,
-        embedding_func=ollama_embed,
-        embedding_model="nomic-embed-text:latest"
+        embedding_func=EmbeddingFunc(
+            embedding_dim=768,
+            max_token_size=8192,
+            func=lambda texts: ollama_embed(texts, embed_model="nomic-embed-text")
+        )
     )
     
     config = RAGAnythingConfig(
@@ -73,10 +77,13 @@ async def ingest_file(model: str = Form(...), file: UploadFile = File(...)):
         )
         
         # Cleanup
-        os.remove(temp_path)
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
         
         return {"status": "success", "message": f"Successfully ingested {file.filename} using RAGAnything"}
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 class ChatRequest(BaseModel):

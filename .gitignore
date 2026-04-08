@@ -27,3 +27,4 @@ venv/*
 backend/__pycache__/*
 backend/build/*
 backend/dist/*
+backend/rag_storage/*
