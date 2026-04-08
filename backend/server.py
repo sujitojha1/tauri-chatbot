@@ -44,7 +44,7 @@ async def my_vision_func(prompt, system_prompt=None, history_messages=None, **kw
     messages.append(user_msg)
     
     client = ollama.AsyncClient()
-    response = await client.chat(model="llama3.2-vision", messages=messages)
+    response = await client.chat(model="gemma4:e4b", messages=messages)
     return response["message"]["content"]
 
 def get_rag(model_name: str):
