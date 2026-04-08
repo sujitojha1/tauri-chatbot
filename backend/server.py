@@ -25,6 +25,27 @@ if not os.path.exists(WORKING_DIR):
 _rag_instances = {}
 
 from lightrag.utils import EmbeddingFunc
+import ollama
+
+async def my_vision_func(prompt, system_prompt=None, history_messages=None, **kwargs):
+    if history_messages is None:
+        history_messages = []
+    
+    image_data = kwargs.pop("image_data", None)
+    
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.extend(history_messages)
+    
+    user_msg = {"role": "user", "content": prompt}
+    if image_data:
+        user_msg["images"] = [image_data]
+    messages.append(user_msg)
+    
+    client = ollama.AsyncClient()
+    response = await client.chat(model="llama3.2-vision", messages=messages)
+    return response["message"]["content"]
 
 def get_rag(model_name: str):
     if model_name in _rag_instances:
@@ -38,19 +59,20 @@ def get_rag(model_name: str):
         embedding_func=EmbeddingFunc(
             embedding_dim=768,
             max_token_size=8192,
-            func=lambda texts: ollama_embed(texts, embed_model="nomic-embed-text")
+            func=lambda texts: ollama_embed.func(texts, embed_model="nomic-embed-text")
         )
     )
     
     config = RAGAnythingConfig(
         working_dir=WORKING_DIR,
-        parser="mineru",
+        parser="docling",
         parse_method="auto"
     )
     
     rag = RAGAnything(
         config=config,
-        lightrag=lightrag
+        lightrag=lightrag,
+        vision_model_func=my_vision_func
     )
     _rag_instances[model_name] = rag
     return rag
