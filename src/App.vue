@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from "vue";
-import { chatStream, type ChatMessage } from "./ollama";
+import { chatStream, getModels, type ChatMessage } from "./ollama";
+import { marked } from "marked";
 
 const message = ref("");
 const isLoading = ref(false);
@@ -8,6 +9,10 @@ const chatHistory = ref<ChatMessage[]>([]);
 const chatContainer = ref<HTMLElement | null>(null);
 
 const STORAGE_KEY = "local-ai-chat-history";
+const MODEL_STORE_KEY = "local-ai-model-choice";
+
+const availableModels = ref<string[]>([]);
+const selectedModel = ref<string>("gemma4:e2b");
 
 onMounted(() => {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -22,6 +27,23 @@ onMounted(() => {
     chatHistory.value.push({ id: Date.now(), role: "assistant", content: "Hello! I am your local AI assistant. How can I help you today?" });
   }
   scrollToBottom();
+  
+  // Load models
+  const savedModel = localStorage.getItem(MODEL_STORE_KEY);
+  if (savedModel) {
+    selectedModel.value = savedModel;
+  }
+  
+  getModels().then(models => {
+    availableModels.value = models;
+    if (!models.includes(selectedModel.value) && models.length > 0) {
+      selectedModel.value = models[0];
+    }
+  });
+});
+
+watch(selectedModel, (newVal) => {
+  localStorage.setItem(MODEL_STORE_KEY, newVal);
 });
 
 watch(chatHistory, (newVal) => {
@@ -51,7 +73,7 @@ const sendMessage = async () => {
   isLoading.value = true;
   
   try {
-    const stream = chatStream(chatHistory.value.slice(0, -1));
+    const stream = chatStream(chatHistory.value.slice(0, -1), selectedModel.value);
     for await (const chunk of stream) {
       const index = chatHistory.value.findIndex(m => m.id === assistantId);
       if (index !== -1) {
@@ -70,14 +92,22 @@ const sendMessage = async () => {
 </script>
 
 <template>
-  <main class="flex flex-col h-screen w-screen overflow-hidden bg-bg-dark text-fg-dark">
+  <main class="flex flex-col h-screen w-screen overflow-hidden bg-neutral-50 text-neutral-900">
     <!-- Header -->
-    <header class="flex items-center justify-between p-4 border-b border-white/10 bg-black/20 backdrop-blur-md z-10 w-full shadow-sm">
+    <header class="flex items-center justify-between p-4 border-b border-neutral-200 bg-white/70 backdrop-blur-md z-10 w-full shadow-sm">
       <div class="flex items-center gap-3">
-        <div class="w-3 h-3 rounded-full animate-pulse shadow-md" :class="isLoading ? 'bg-amber-500 shadow-amber-500/50' : 'bg-emerald-500 shadow-emerald-500/50'"></div>
-        <h1 class="font-semibold tracking-wide text-lg text-white">Local AI Chatbot</h1>
+        <div class="w-3 h-3 rounded-full animate-pulse shadow-sm" :class="isLoading ? 'bg-amber-500 shadow-amber-500/30' : 'bg-emerald-500 shadow-emerald-500/30'"></div>
+        <h1 class="font-semibold tracking-wide text-lg text-neutral-800 font-mono">{{ selectedModel }}</h1>
       </div>
-      <button class="text-sm px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors">Settings</button>
+      <div>
+        <select 
+          v-model="selectedModel" 
+          class="text-sm px-3 py-1.5 rounded-md bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer pr-8 relative shadow-sm"
+          style="background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%234b5563%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><polyline points=%226 9 12 15 18 9%22></polyline></svg>'); background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 1em;"
+        >
+          <option v-for="mod in availableModels" :key="mod" :value="mod" class="bg-white text-neutral-900">{{ mod }}</option>
+        </select>
+      </div>
     </header>
 
     <!-- Chat Area -->
@@ -89,19 +119,19 @@ const sendMessage = async () => {
         :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
       >
         <div 
-          class="max-w-[85%] rounded-2xl px-5 py-3 shadow-sm transform transition-all whitespace-pre-wrap"
+          class="max-w-[85%] rounded-2xl px-6 py-4 shadow-sm transform transition-all whitespace-pre-wrap"
           :class="msg.role === 'user' 
-            ? 'bg-primary text-white rounded-br-sm' 
-            : 'bg-white/10 border border-white/5 rounded-bl-sm text-fg-dark'"
+            ? 'bg-primary text-white rounded-br-sm shadow-md' 
+            : 'bg-white border border-neutral-200 rounded-bl-sm text-neutral-800'"
         >
           <!-- Typing Indicator -->
           <div v-if="msg.content === '' && isLoading" class="flex items-center space-x-2 py-2 w-8">
-            <div class="w-2 h-2 bg-white/50 rounded-full animate-bounce"></div>
-            <div class="w-2 h-2 bg-white/50 rounded-full animate-bounce" style="animation-delay: 0.15s"></div>
-            <div class="w-2 h-2 bg-white/50 rounded-full animate-bounce" style="animation-delay: 0.3s"></div>
+            <div class="w-2 h-2 bg-neutral-400/60 rounded-full animate-bounce"></div>
+            <div class="w-2 h-2 bg-neutral-400/60 rounded-full animate-bounce" style="animation-delay: 0.15s"></div>
+            <div class="w-2 h-2 bg-neutral-400/60 rounded-full animate-bounce" style="animation-delay: 0.3s"></div>
           </div>
           <!-- Message Content -->
-          <p v-else class="leading-relaxed">{{ msg.content }}</p>
+          <div v-else class="leading-relaxed prose prose-emerald max-w-none prose-p:leading-relaxed prose-pre:bg-neutral-50 prose-pre:border prose-pre:border-neutral-200 prose-pre:text-neutral-800" :class="msg.role === 'user' ? 'prose-invert' : 'prose-slate'" v-html="marked.parse(msg.content)"></div>
         </div>
       </div>
     </div>
@@ -113,12 +143,12 @@ const sendMessage = async () => {
           v-model="message"
           type="text" 
           placeholder="Message local AI..."
-          class="w-full bg-white/5 border border-white/10 text-white placeholder-white/40 rounded-full pl-6 pr-14 py-3.5 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all font-medium disabled:opacity-50"
+          class="w-full bg-white border border-neutral-200 text-neutral-900 placeholder-neutral-400 rounded-full pl-6 pr-14 py-3.5 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all font-medium disabled:opacity-50 shadow-sm"
           :disabled="isLoading"
         />
         <button 
           type="submit"
-          class="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-primary hover:bg-primary-hover text-white rounded-full transition-transform active:scale-95 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+          class="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-primary hover:bg-primary-hover text-white rounded-full transition-transform active:scale-95 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
           :disabled="!message.trim() || isLoading"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">

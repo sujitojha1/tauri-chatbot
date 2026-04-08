@@ -29,7 +29,7 @@ This document outlines the step-by-step phased approach for building the minimal
 - [x] Add basic error handling if Ollama is not running.
 
 ## Phase 5: Polish & Finalization
-- [ ] Incorporate a Markdown parser to correctly render AI responses (code blocks, bold text, etc.).
-- [ ] Add smooth scroll behaviors and subtle micro-animations (e.g., message entry transitions).
-- [ ] Perform final local tests on the macOS environment.
-- [ ] Finalize build configurations in `tauri.conf.json`.
+- [x] Incorporate a Markdown parser to correctly render AI responses (code blocks, bold text, etc.).
+- [x] Add smooth scroll behaviors and subtle micro-animations (e.g., message entry transitions).
+- [x] Perform final local tests on the macOS environment.
+- [x] Finalize build configurations in `tauri.conf.json`.
