@@ -137,23 +137,24 @@ const sendMessage = async () => {
     </div>
 
     <!-- Input Area -->
-    <footer class="p-4 bg-transparent w-full">
+    <footer class="p-4 bg-transparent w-full pb-8">
       <form @submit.prevent="sendMessage" class="relative max-w-3xl mx-auto w-full">
         <input 
           v-model="message"
           type="text" 
-          placeholder="Message local AI..."
-          class="w-full bg-white border border-neutral-200 text-neutral-900 placeholder-neutral-400 rounded-full pl-6 pr-14 py-3.5 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all font-medium disabled:opacity-50 shadow-sm"
+          placeholder="Send a message"
+          class="w-full bg-neutral-100 border-none text-neutral-900 placeholder-neutral-400 rounded-3xl pl-6 pr-14 py-4 focus:outline-none focus:ring-2 focus:ring-neutral-200 transition-all font-medium text-[15px] disabled:opacity-50 shadow-sm"
           :disabled="isLoading"
         />
         <button 
           type="submit"
-          class="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-primary hover:bg-primary-hover text-white rounded-full transition-transform active:scale-95 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          class="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full transition-all flex items-center justify-center shadow-sm"
+          :class="message.trim() && !isLoading ? 'bg-neutral-800 text-white hover:bg-neutral-700 cursor-pointer active:scale-95' : 'bg-neutral-300 text-white cursor-default'"
           :disabled="!message.trim() || isLoading"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            <line x1="12" y1="19" x2="12" y2="5"></line>
+            <polyline points="5 12 12 5 19 12"></polyline>
           </svg>
         </button>
       </form>
