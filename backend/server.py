@@ -4,7 +4,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from lightrag import LightRAG, QueryParam
-from lightrag.llm import ollama_model_complete, ollama_embedding
+from lightrag.llm.ollama import ollama_model_complete, ollama_embed
 
 app = FastAPI()
 
@@ -32,7 +32,7 @@ def get_rag(model_name: str) -> LightRAG:
         llm_model_name=model_name,
         llm_model_max_async=2,
         llm_model_max_token_size=32768,
-        embedding_func=ollama_embedding,
+        embedding_func=ollama_embed,
         embedding_model="nomic-embed-text:latest"
     )
     _rag_instances[model_name] = rag

@@ -76,3 +76,31 @@ export async function* chatStream(messages: ChatMessage[], model: string = DEFAU
     reader.releaseLock();
   }
 }
+
+// LightRAG File Ingestion
+export async function uploadDocument(file: File, modelName: string) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("model", modelName);
+  
+  const res = await fetch("http://127.0.0.1:8000/ingest", {
+    method: "POST",
+    body: formData
+  });
+  if (!res.ok) throw new Error("Failed to ingest document");
+  return await res.json();
+}
+
+// LightRAG Context Chat
+export async function chatRAG(query: string, modelName: string) {
+  const res = await fetch("http://127.0.0.1:8000/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: query, model: modelName })
+  });
+  if (!res.ok) throw new Error("Failed to query Knowledge Base");
+  
+  const data = await res.json();
+  return data.response;
+}
+

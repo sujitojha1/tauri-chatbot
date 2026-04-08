@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from "vue";
-import { chatStream, getModels, type ChatMessage } from "./ollama";
+import { chatStream, chatRAG, uploadDocument, getModels, type ChatMessage } from "./ollama";
 import { marked } from "marked";
 
 const message = ref("");
@@ -13,6 +13,31 @@ const MODEL_STORE_KEY = "local-ai-model-choice";
 
 const availableModels = ref<string[]>([]);
 const selectedModel = ref<string>("gemma4:e2b");
+const isIngesting = ref(false);
+const useRAG = ref(false);
+
+const handleFileUpload = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (!target.files || target.files.length === 0) return;
+  
+  const file = target.files[0];
+  isIngesting.value = true;
+  try {
+    await uploadDocument(file, selectedModel.value);
+    useRAG.value = true;
+    chatHistory.value.push({
+      id: Date.now(),
+      role: "assistant",
+      content: `I've successfully ingested **${file.name}** and added it to my knowledge base. You can now ask me questions about it!`
+    });
+    scrollToBottom();
+  } catch (error: any) {
+    alert("Error ingesting file: " + error.message);
+  } finally {
+    isIngesting.value = false;
+    target.value = "";
+  }
+};
 
 onMounted(() => {
   // Always start with a fresh chat
@@ -65,11 +90,19 @@ const sendMessage = async () => {
   isLoading.value = true;
   
   try {
-    const stream = chatStream(chatHistory.value.slice(0, -1), selectedModel.value);
-    for await (const chunk of stream) {
+    if (useRAG.value) {
+      const response = await chatRAG(userMsg, selectedModel.value);
       const index = chatHistory.value.findIndex(m => m.id === assistantId);
       if (index !== -1) {
-        chatHistory.value[index].content += chunk;
+        chatHistory.value[index].content = response;
+      }
+    } else {
+      const stream = chatStream(chatHistory.value.slice(0, -1), selectedModel.value);
+      for await (const chunk of stream) {
+        const index = chatHistory.value.findIndex(m => m.id === assistantId);
+        if (index !== -1) {
+          chatHistory.value[index].content += chunk;
+        }
       }
     }
   } catch (err: any) {
@@ -91,7 +124,20 @@ const sendMessage = async () => {
         <div class="w-3 h-3 rounded-full animate-pulse shadow-sm" :class="isLoading ? 'bg-amber-500 shadow-amber-500/30' : 'bg-emerald-500 shadow-emerald-500/30'"></div>
         <h1 class="font-semibold tracking-wide text-lg text-neutral-800 font-mono">{{ selectedModel }}</h1>
       </div>
-      <div>
+      <div class="flex items-center gap-4">
+        <label 
+          class="cursor-pointer text-sm px-4 py-2 rounded-md bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition-colors shadow-sm flex items-center gap-2"
+          :class="{'opacity-50 pointer-events-none': isIngesting}"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span v-if="!isIngesting" class="font-medium text-neutral-600 block sm:hidden md:block">Ingest File</span>
+          <span v-else class="font-medium text-neutral-600 block sm:hidden md:block">Indexing...</span>
+          <input type="file" class="hidden" @change="handleFileUpload" accept=".txt,.md,.pdf,.csv,.json" :disabled="isIngesting" />
+        </label>
         <select 
           v-model="selectedModel" 
           class="text-sm px-3 py-1.5 rounded-md bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none cursor-pointer pr-8 relative shadow-sm"
