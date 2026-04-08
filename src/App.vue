@@ -15,6 +15,7 @@ const availableModels = ref<string[]>([]);
 const selectedModel = ref<string>("gemma4:e2b");
 const isIngesting = ref(false);
 const useRAG = ref(false);
+const ingestedFiles = ref<string[]>([]);
 
 const handleFileUpload = async (event: Event) => {
   const target = event.target as HTMLInputElement;
@@ -25,6 +26,9 @@ const handleFileUpload = async (event: Event) => {
   try {
     await uploadDocument(file, selectedModel.value);
     useRAG.value = true;
+    if (!ingestedFiles.value.includes(file.name)) {
+      ingestedFiles.value.push(file.name);
+    }
     chatHistory.value.push({
       id: Date.now(),
       role: "assistant",
@@ -117,8 +121,28 @@ const sendMessage = async () => {
 </script>
 
 <template>
-  <main class="flex flex-col h-screen w-screen overflow-hidden bg-neutral-50 text-neutral-900">
-    <!-- Header -->
+  <div class="flex h-screen w-screen overflow-hidden bg-neutral-50 text-neutral-900">
+    <!-- Left Sidebar -->
+    <aside class="w-64 border-r border-neutral-200 bg-white shadow-sm flex flex-col hidden md:flex shrink-0 z-20">
+      <div class="p-4 border-b border-neutral-100 bg-white/70 backdrop-blur-md">
+        <h2 class="font-semibold text-neutral-800 tracking-wide text-sm flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          Knowledge Base
+        </h2>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4 space-y-2">
+        <div v-if="ingestedFiles.length === 0" class="text-xs text-neutral-400 text-center mt-6">
+          No files ingested yet.
+        </div>
+        <div v-for="fileName in ingestedFiles" :key="fileName" class="text-sm text-neutral-700 bg-neutral-50 border border-neutral-200 rounded-md px-3 py-2.5 shadow-sm flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500 shrink-0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          <span class="truncate block w-full">{{ fileName }}</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="flex flex-1 flex-col h-full overflow-hidden relative">
+      <!-- Header -->
     <header class="flex items-center justify-between p-4 border-b border-neutral-200 bg-white/70 backdrop-blur-md z-10 w-full shadow-sm">
       <div class="flex items-center gap-3">
         <div class="w-3 h-3 rounded-full animate-pulse shadow-sm" :class="isLoading ? 'bg-amber-500 shadow-amber-500/30' : 'bg-emerald-500 shadow-emerald-500/30'"></div>
@@ -198,4 +222,5 @@ const sendMessage = async () => {
       </form>
     </footer>
   </main>
+  </div>
 </template>

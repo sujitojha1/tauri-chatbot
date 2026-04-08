@@ -9,6 +9,7 @@ A minimalistic, lightweight desktop chatbot application built with Tauri, Vue 3,
 *   **Modern Tech Stack:** Powered by Vue 3 (Composition API) and the ultra-fast Vite build tool.
 *   **Local AI Powered:** Connects directly to your local [Ollama](https://ollama.com/) instance for intelligent, offline AI interactions.
 *   **Privacy First:** Chat history, settings, and prompts natively remain local. No data is sent to the cloud.
+*   **Knowledge Base Integration:** Upload files seamlessly to run accurate local Knowledge Graph RAG context queries completely utilizing LightRAG architecture.
 *   **Markdown Support:** Rich text rendering in chat messages, complete with code syntax highlighting.
 *   **Responsive & Fast:** Near-instant load times and smooth micro-animations for a premium feel.
 *   **System Integration:** Native window controls and OS-level notifications.
@@ -35,7 +36,12 @@ A minimalistic, lightweight desktop chatbot application built with Tauri, Vue 3,
    ```bash
    npm install
    ```
-2. Start the Vite development server and the Tauri application window simultaneously:
+2. Start the LightRAG Python backend server in a separate terminal:
+   ```bash
+   cd backend
+   ../venv/bin/python -m uvicorn server:app --port 8000
+   ```
+3. Start the Vite development server and the Tauri application window simultaneously:
    ```bash
    npm run tauri dev
    ```

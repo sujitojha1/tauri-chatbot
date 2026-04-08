@@ -33,3 +33,10 @@ This document outlines the step-by-step phased approach for building the minimal
 - [x] Add smooth scroll behaviors and subtle micro-animations (e.g., message entry transitions).
 - [x] Perform final local tests on the macOS environment.
 - [x] Finalize build configurations in `tauri.conf.json`.
+
+## Phase 6: Knowledge Base (LightRAG)
+- [x] Create a Python FastAPI server implementing `lightrag-hku`.
+- [x] Add an "Ingest File" UI button to process `.txt`, `.md`, `.pdf`, `.csv`, `.json` files via local backend.
+- [x] Add a persistent left-sidebar listing perfectly indexed knowledge base files.
+- [x] Route chat queries securely through LightRAG contextual engine when an ingested file is present.
+- [x] Detach backend from native Tauri `.app` packaging to support standalone Python process architecture.
