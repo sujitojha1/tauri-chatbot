@@ -8,24 +8,17 @@ const isLoading = ref(false);
 const chatHistory = ref<ChatMessage[]>([]);
 const chatContainer = ref<HTMLElement | null>(null);
 
-const STORAGE_KEY = "local-ai-chat-history";
+
 const MODEL_STORE_KEY = "local-ai-model-choice";
 
 const availableModels = ref<string[]>([]);
 const selectedModel = ref<string>("gemma4:e2b");
 
 onMounted(() => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored) {
-    try {
-      chatHistory.value = JSON.parse(stored);
-    } catch {
-      chatHistory.value = [];
-    }
-  }
-  if (chatHistory.value.length === 0) {
-    chatHistory.value.push({ id: Date.now(), role: "assistant", content: "Hello! I am your local AI assistant. How can I help you today?" });
-  }
+  // Always start with a fresh chat
+  chatHistory.value = [
+    { id: Date.now(), role: "assistant", content: "Hello! I am your local AI assistant. How can I help you today?" }
+  ];
   scrollToBottom();
   
   // Load models
@@ -46,8 +39,7 @@ watch(selectedModel, (newVal) => {
   localStorage.setItem(MODEL_STORE_KEY, newVal);
 });
 
-watch(chatHistory, (newVal) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(newVal));
+watch(chatHistory, () => {
   scrollToBottom();
 }, { deep: true });
 
