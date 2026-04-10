@@ -22,7 +22,7 @@ const handleFileUpload = (event: Event) => {
 onMounted(() => {
   // Always start with a fresh chat
   chatHistory.value = [
-    { id: Date.now(), role: "assistant", content: "Hello! I am your local AI assistant. How can I help you today?" }
+    { id: Date.now(), role: "assistant", content: "Hello! I am your local PD Checker assistant. How can I help you today?" }
   ];
   scrollToBottom();
   
