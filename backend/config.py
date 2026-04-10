@@ -12,9 +12,10 @@ QDRANT_HOST = "localhost"
 QDRANT_PORT = 6333
 GLOBAL_COLLECTION = "global"
 
-# Embeddings
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # fast, 384-dim, runs locally
-EMBEDDING_DIM = 384
+# Embeddings — served by Ollama (no separate model download needed)
+EMBEDDING_MODEL = "nomic-embed-text:latest"
+EMBEDDING_DIM = 768          # nomic-embed-text output dimension
+OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 
 # Chunking
 CHUNK_SIZE = 512

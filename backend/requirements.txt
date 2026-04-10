@@ -14,9 +14,6 @@ docling>=2.0.0
 # Chunking
 langchain-text-splitters>=0.2.0
 
-# Embeddings (local, no API key)
-sentence-transformers>=3.0.0
-
 # Vector database client
 qdrant-client>=1.9.0
 
