@@ -81,9 +81,9 @@ def search(
             must=[FieldCondition(key="file_id", match=MatchValue(value=file_id))]
         )
 
-    hits = client.search(
+    result = client.query_points(
         collection_name=collection,
-        query_vector=query_vector,
+        query=query_vector,
         limit=limit,
         query_filter=query_filter,
         with_payload=True,
@@ -96,7 +96,7 @@ def search(
             "file_id": h.payload["file_id"],
             "chunk_index": h.payload["chunk_index"],
         }
-        for h in hits
+        for h in result.points
     ]
 
 
