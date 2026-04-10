@@ -4,9 +4,11 @@ Collections are created lazily — one per context ("global" or "session:<id>").
 """
 from __future__ import annotations
 
+import uuid
 from functools import lru_cache
 
 from qdrant_client import QdrantClient
+from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.models import (
     Distance,
     PointStruct,
@@ -26,12 +28,14 @@ def get_client() -> QdrantClient:
 
 def _ensure_collection(collection: str):
     client = get_client()
-    existing = {c.name for c in client.get_collections().collections}
-    if collection not in existing:
+    try:
         client.create_collection(
             collection_name=collection,
             vectors_config=VectorParams(size=EMBEDDING_DIM, distance=Distance.COSINE),
         )
+    except UnexpectedResponse as e:
+        if e.status_code != 409:
+            raise
 
 
 def upsert_chunks(
@@ -46,7 +50,7 @@ def upsert_chunks(
 
     points = [
         PointStruct(
-            id=f"{file_id}_{i}",
+            id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{file_id}_{i}")),
             vector=vectors[i],
             payload={
                 "file_id": file_id,
