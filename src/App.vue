@@ -289,121 +289,170 @@ watch(chatHistory, scrollToBottom, { deep: true });
 <template>
   <div class="flex h-screen w-screen overflow-hidden bg-neutral-50 text-neutral-900">
 
-    <!-- ── Left Sidebar: Global Knowledge Base ─────────────────────────────── -->
-    <aside class="w-64 border-r border-neutral-200 bg-white shadow-sm hidden md:flex flex-col shrink-0 z-20">
-      <!-- Header -->
-      <div class="p-4 border-b border-neutral-100 bg-white/70 backdrop-blur-md">
-        <h2 class="font-semibold text-neutral-800 tracking-wide text-sm flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            class="text-neutral-500">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="16" y1="13" x2="8" y2="13" />
-            <line x1="16" y1="17" x2="8" y2="17" />
-          </svg>
-          Knowledge Base
-        </h2>
-        <!-- RAG backend status -->
-        <div class="mt-1.5 flex items-center gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full" :class="ragAvailable ? 'bg-emerald-400' : 'bg-neutral-300'"></span>
-          <span class="text-xs" :class="ragAvailable ? 'text-emerald-600' : 'text-neutral-400'">
-            {{ ragAvailable ? 'RAG backend online' : 'RAG backend offline' }}
-          </span>
+    <!-- ── Left Sidebar ──────────────────────────────────────────────────────── -->
+    <aside class="w-56 border-r border-neutral-200 bg-white shadow-sm hidden md:flex flex-col shrink-0 z-20">
+      <!-- Sidebar header -->
+      <div class="px-3 py-2.5 border-b border-neutral-100 bg-white/70 backdrop-blur-md">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-neutral-800 tracking-wide text-xs flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              class="text-neutral-500">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            Knowledge Base
+          </h2>
+          <div class="flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full" :class="ragAvailable ? 'bg-emerald-400' : 'bg-neutral-300'"></span>
+            <span class="text-[10px]" :class="ragAvailable ? 'text-emerald-600' : 'text-neutral-400'">
+              {{ ragAvailable ? 'online' : 'offline' }}
+            </span>
+          </div>
         </div>
       </div>
 
-      <!-- File list -->
-      <div class="flex-1 overflow-y-auto p-3 space-y-2">
-        <template v-if="!ragAvailable">
-          <p class="text-xs text-neutral-400 text-center mt-6 px-2 leading-relaxed">
-            Start the RAG backend to enable document ingestion.<br>
-            <code class="text-[10px] bg-neutral-100 px-1 py-0.5 rounded">cd backend && ./start.sh</code>
-          </p>
-        </template>
+      <div class="flex-1 overflow-y-auto flex flex-col min-h-0">
 
-        <template v-else-if="globalFiles.length === 0">
-          <p class="text-xs text-neutral-400 text-center mt-6">No files ingested yet.</p>
-        </template>
-
-        <div
-          v-for="file in globalFiles"
-          :key="file.id"
-          class="group relative bg-neutral-50 border border-neutral-200 rounded-lg p-2.5 hover:border-neutral-300 transition-colors"
-        >
-          <!-- Filename -->
-          <div class="flex items-start justify-between gap-1">
-            <span class="text-xs font-medium text-neutral-700 truncate flex-1" :title="file.filename">
-              {{ file.filename }}
-            </span>
-            <!-- Delete -->
-            <button
-              @click="handleDeleteGlobal(file)"
-              class="opacity-0 group-hover:opacity-100 transition-opacity text-neutral-400 hover:text-red-500 shrink-0 mt-0.5"
-              title="Remove file"
+        <!-- ── Global section ── -->
+        <div class="flex flex-col min-h-0">
+          <div class="flex items-center justify-between px-3 pt-2.5 pb-1">
+            <span class="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Global</span>
+            <label
+              class="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors"
+              :class="ragAvailable && !globalUploading
+                ? 'cursor-pointer bg-white border-neutral-200 text-neutral-500 hover:bg-neutral-50 hover:border-neutral-300'
+                : 'cursor-not-allowed bg-neutral-50 border-neutral-100 text-neutral-300'"
+              title="Add to global knowledge base"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              <svg v-if="globalUploading" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
-            </button>
+              {{ globalUploading ? 'Adding…' : 'Add' }}
+              <input ref="globalFileInput" type="file" class="hidden" multiple
+                accept=".pdf,.docx,.txt,.md,.html,.pptx,.xlsx"
+                :disabled="!ragAvailable || globalUploading" @change="handleGlobalUpload" />
+            </label>
           </div>
 
-          <!-- Meta row: size + status -->
-          <div class="mt-1.5 flex items-center justify-between gap-2">
-            <span class="text-[10px] text-neutral-400">{{ file.size_human }}</span>
-            <div class="flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusDot(file.status)"></span>
-              <span class="text-[10px]" :class="statusColor(file.status)">{{ statusLabel(file) }}</span>
+          <div class="px-2 pb-2 space-y-1">
+            <template v-if="!ragAvailable">
+              <p class="text-[10px] text-neutral-400 text-center py-3 px-1 leading-relaxed">
+                Start RAG backend to enable ingestion.
+              </p>
+            </template>
+            <template v-else-if="globalFiles.length === 0">
+              <p class="text-[10px] text-neutral-400 text-center py-3">No global files yet.</p>
+            </template>
+            <div v-for="file in globalFiles" :key="file.id"
+              class="group relative bg-neutral-50 border border-neutral-200 rounded-md p-2 hover:border-neutral-300 transition-colors">
+              <div class="flex items-start justify-between gap-1">
+                <span class="text-[11px] font-medium text-neutral-700 truncate flex-1" :title="file.filename">
+                  {{ file.filename }}
+                </span>
+                <button @click="handleDeleteGlobal(file)"
+                  class="opacity-0 group-hover:opacity-100 transition-opacity text-neutral-400 hover:text-red-500 shrink-0"
+                  title="Remove">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div class="mt-1 flex items-center justify-between gap-1">
+                <span class="text-[10px] text-neutral-400">{{ file.size_human }}</span>
+                <div class="flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusDot(file.status)"></span>
+                  <span class="text-[10px]" :class="statusColor(file.status)">{{ statusLabel(file) }}</span>
+                </div>
+              </div>
+              <div v-if="['pending','processing','chunked'].includes(file.status)"
+                class="mt-1 h-0.5 bg-neutral-200 rounded-full overflow-hidden">
+                <div class="h-full bg-amber-400 animate-pulse rounded-full w-3/4"></div>
+              </div>
+              <p v-if="file.error" class="mt-1 text-[10px] text-red-500 truncate" :title="file.error">
+                {{ file.error }}
+              </p>
             </div>
           </div>
+        </div>
 
-          <!-- Progress bar while processing -->
-          <div v-if="['pending','processing','chunked'].includes(file.status)"
-            class="mt-1.5 h-0.5 bg-neutral-200 rounded-full overflow-hidden">
-            <div class="h-full bg-amber-400 animate-pulse rounded-full w-3/4"></div>
+        <!-- ── Divider ── -->
+        <div class="mx-3 my-1 border-t border-neutral-200"></div>
+
+        <!-- ── Session section ── -->
+        <div class="flex flex-col min-h-0">
+          <div class="flex items-center justify-between px-3 pt-1.5 pb-1">
+            <span class="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Session</span>
+            <label v-if="ragAvailable"
+              class="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors"
+              :class="!sessionUploading
+                ? 'cursor-pointer bg-white border-neutral-200 text-neutral-500 hover:bg-neutral-50 hover:border-neutral-300'
+                : 'cursor-not-allowed bg-neutral-50 border-neutral-100 text-neutral-300'"
+              title="Add to this session only"
+            >
+              <svg v-if="sessionUploading" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              {{ sessionUploading ? 'Adding…' : 'Add' }}
+              <input ref="sessionFileInput" type="file" class="hidden" multiple
+                accept=".pdf,.docx,.txt,.md,.html,.pptx,.xlsx"
+                :disabled="sessionUploading" @change="handleSessionUpload" />
+            </label>
           </div>
 
-          <!-- Error tooltip -->
-          <p v-if="file.error" class="mt-1 text-[10px] text-red-500 truncate" :title="file.error">
-            {{ file.error }}
-          </p>
+          <div class="px-2 pb-2 space-y-1">
+            <template v-if="!ragAvailable">
+              <p class="text-[10px] text-neutral-400 text-center py-3">RAG offline.</p>
+            </template>
+            <template v-else-if="sessionFiles.length === 0">
+              <p class="text-[10px] text-neutral-400 text-center py-3">No session files yet.</p>
+            </template>
+            <div v-for="file in sessionFiles" :key="file.id"
+              class="group relative bg-blue-50/50 border border-blue-100 rounded-md p-2 hover:border-blue-200 transition-colors">
+              <div class="flex items-start justify-between gap-1">
+                <span class="text-[11px] font-medium text-neutral-700 truncate flex-1" :title="file.filename">
+                  {{ file.filename }}
+                </span>
+                <button @click="handleDeleteSession(file)"
+                  class="opacity-0 group-hover:opacity-100 transition-opacity text-neutral-400 hover:text-red-500 shrink-0"
+                  title="Remove">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div class="mt-1 flex items-center justify-between gap-1">
+                <span class="text-[10px] text-neutral-400">{{ file.size_human }}</span>
+                <div class="flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusDot(file.status)"></span>
+                  <span class="text-[10px]" :class="statusColor(file.status)">{{ statusLabel(file) }}</span>
+                </div>
+              </div>
+              <div v-if="['pending','processing','chunked'].includes(file.status)"
+                class="mt-1 h-0.5 bg-neutral-200 rounded-full overflow-hidden">
+                <div class="h-full bg-blue-400 animate-pulse rounded-full w-3/4"></div>
+              </div>
+              <p v-if="file.error" class="mt-1 text-[10px] text-red-500 truncate" :title="file.error">
+                {{ file.error }}
+              </p>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <!-- Upload button -->
-      <div class="p-4 border-t border-neutral-100 bg-white/50 backdrop-blur-sm">
-        <label
-          class="text-sm px-4 py-2 w-full rounded-md border shadow-sm flex items-center justify-center gap-2 transition-colors"
-          :class="ragAvailable && !globalUploading
-            ? 'cursor-pointer bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300'
-            : 'cursor-not-allowed bg-neutral-100 border-neutral-200 text-neutral-400 opacity-60'"
-        >
-          <!-- spinner or icon -->
-          <svg v-if="globalUploading" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            class="animate-spin">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-          </svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          <span class="font-medium text-xs">
-            {{ globalUploading ? 'Uploading…' : 'Ingest File' }}
-          </span>
-          <input
-            ref="globalFileInput"
-            type="file"
-            class="hidden"
-            multiple
-            accept=".pdf,.docx,.txt,.md,.html,.pptx,.xlsx"
-            :disabled="!ragAvailable || globalUploading"
-            @change="handleGlobalUpload"
-          />
-        </label>
       </div>
     </aside>
 
@@ -428,53 +477,6 @@ watch(chatHistory, scrollToBottom, { deep: true });
         </div>
 
         <div class="flex items-center gap-2 shrink-0">
-          <!-- Session file upload -->
-          <div v-if="ragAvailable" class="flex items-center gap-1.5">
-            <!-- Session file chips -->
-            <div v-for="f in sessionFiles" :key="f.id"
-              class="hidden sm:flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border bg-white"
-              :class="f.status === 'indexed' ? 'border-emerald-200 text-emerald-600' : 'border-neutral-200 text-neutral-500'"
-            >
-              <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusDot(f.status)"></span>
-              <span class="truncate max-w-[80px]" :title="f.filename">{{ f.filename }}</span>
-              <button @click="handleDeleteSession(f)" class="ml-0.5 text-neutral-400 hover:text-red-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            <!-- Session upload button -->
-            <label
-              class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border shadow-sm transition-colors"
-              :class="!sessionUploading
-                ? 'cursor-pointer bg-white border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-                : 'cursor-not-allowed bg-neutral-100 border-neutral-200 text-neutral-400 opacity-60'"
-              title="Upload file for this session only"
-            >
-              <svg v-if="sessionUploading" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                class="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="17 8 12 3 7 8" />
-                <line x1="12" y1="3" x2="12" y2="15" />
-              </svg>
-              <span class="hidden sm:inline">{{ sessionUploading ? 'Uploading…' : 'Session file' }}</span>
-              <input
-                ref="sessionFileInput"
-                type="file"
-                class="hidden"
-                multiple
-                accept=".pdf,.docx,.txt,.md,.html,.pptx,.xlsx"
-                :disabled="sessionUploading"
-                @change="handleSessionUpload"
-              />
-            </label>
-          </div>
-
           <!-- Model selector -->
           <select
             v-model="selectedModel"
@@ -487,7 +489,7 @@ watch(chatHistory, scrollToBottom, { deep: true });
       </header>
 
       <!-- Chat messages -->
-      <div ref="chatContainer" class="flex-1 overflow-y-auto p-4 space-y-6 flex flex-col scroll-smooth items-center">
+      <div ref="chatContainer" class="flex-1 overflow-y-auto px-4 py-3 space-y-2 flex flex-col scroll-smooth items-center">
         <div
           v-for="msg in chatHistory"
           :key="msg.id"
@@ -495,21 +497,21 @@ watch(chatHistory, scrollToBottom, { deep: true });
           :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
         >
           <div
-            class="max-w-[85%] rounded-2xl px-6 py-4 shadow-sm transform transition-all whitespace-pre-wrap"
+            class="max-w-[85%] rounded-xl px-4 py-2.5 shadow-sm transform transition-all whitespace-pre-wrap"
             :class="msg.role === 'user'
               ? 'bg-primary text-white rounded-br-sm shadow-md'
               : 'bg-white border border-neutral-200 rounded-bl-sm text-neutral-800'"
           >
             <!-- Typing indicator -->
-            <div v-if="msg.content === '' && isLoading" class="flex items-center space-x-2 py-2 w-8">
-              <div class="w-2 h-2 bg-neutral-400/60 rounded-full animate-bounce"></div>
-              <div class="w-2 h-2 bg-neutral-400/60 rounded-full animate-bounce" style="animation-delay:0.15s"></div>
-              <div class="w-2 h-2 bg-neutral-400/60 rounded-full animate-bounce" style="animation-delay:0.3s"></div>
+            <div v-if="msg.content === '' && isLoading" class="flex items-center space-x-1.5 py-1 w-8">
+              <div class="w-1.5 h-1.5 bg-neutral-400/60 rounded-full animate-bounce"></div>
+              <div class="w-1.5 h-1.5 bg-neutral-400/60 rounded-full animate-bounce" style="animation-delay:0.15s"></div>
+              <div class="w-1.5 h-1.5 bg-neutral-400/60 rounded-full animate-bounce" style="animation-delay:0.3s"></div>
             </div>
             <!-- Message content -->
             <div
               v-else
-              class="leading-relaxed prose prose-emerald max-w-none prose-p:leading-relaxed prose-pre:bg-neutral-50 prose-pre:border prose-pre:border-neutral-200 prose-pre:text-neutral-800"
+              class="text-[13px] leading-snug prose prose-sm prose-emerald max-w-none prose-p:my-1 prose-p:leading-snug prose-pre:bg-neutral-50 prose-pre:border prose-pre:border-neutral-200 prose-pre:text-neutral-800 prose-ul:my-1 prose-li:my-0 prose-headings:my-1"
               :class="msg.role === 'user' ? 'prose-invert' : 'prose-slate'"
               v-html="marked.parse(msg.content)"
             ></div>
@@ -539,7 +541,7 @@ watch(chatHistory, scrollToBottom, { deep: true });
             v-model="message"
             type="text"
             :placeholder="ragAvailable && hasIndexedFiles ? 'Ask about your documents…' : 'Send a message'"
-            class="w-full bg-neutral-100 border-none text-neutral-900 placeholder-neutral-400 rounded-3xl pl-6 pr-14 py-4 focus:outline-none focus:ring-2 focus:ring-neutral-200 transition-all font-medium text-[15px] disabled:opacity-50 shadow-sm"
+            class="w-full bg-neutral-100 border-none text-neutral-900 placeholder-neutral-400 rounded-3xl pl-5 pr-12 py-3 focus:outline-none focus:ring-2 focus:ring-neutral-200 transition-all font-medium text-[13px] disabled:opacity-50 shadow-sm"
             :disabled="isLoading"
           />
           <button
