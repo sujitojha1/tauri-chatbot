@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from "vue";
-import { chatStream, chatRAG, uploadDocument, getModels, type ChatMessage } from "./ollama";
+import { chatStream, getModels, type ChatMessage } from "./ollama";
 import { marked } from "marked";
 
 const message = ref("");
@@ -13,34 +13,10 @@ const MODEL_STORE_KEY = "local-ai-model-choice";
 
 const availableModels = ref<string[]>([]);
 const selectedModel = ref<string>("gemma4:e2b");
-const isIngesting = ref(false);
-const useRAG = ref(false);
-const ingestedFiles = ref<string[]>([]);
 
-const handleFileUpload = async (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  if (!target.files || target.files.length === 0) return;
-  
-  const file = target.files[0];
-  isIngesting.value = true;
-  try {
-    await uploadDocument(file, selectedModel.value);
-    useRAG.value = true;
-    if (!ingestedFiles.value.includes(file.name)) {
-      ingestedFiles.value.push(file.name);
-    }
-    chatHistory.value.push({
-      id: Date.now(),
-      role: "assistant",
-      content: `I've successfully ingested **${file.name}** and added it to my knowledge base. You can now ask me questions about it!`
-    });
-    scrollToBottom();
-  } catch (error: any) {
-    alert("Error ingesting file: " + error.message);
-  } finally {
-    isIngesting.value = false;
-    target.value = "";
-  }
+// RAG backend completely removed; upload button is disabled for chat-only interface.
+const handleFileUpload = (event: Event) => {
+  event.preventDefault();
 };
 
 onMounted(() => {
@@ -94,19 +70,11 @@ const sendMessage = async () => {
   isLoading.value = true;
   
   try {
-    if (useRAG.value) {
-      const response = await chatRAG(userMsg, selectedModel.value);
+    const stream = chatStream(chatHistory.value.slice(0, -1), selectedModel.value);
+    for await (const chunk of stream) {
       const index = chatHistory.value.findIndex(m => m.id === assistantId);
       if (index !== -1) {
-        chatHistory.value[index].content = response;
-      }
-    } else {
-      const stream = chatStream(chatHistory.value.slice(0, -1), selectedModel.value);
-      for await (const chunk of stream) {
-        const index = chatHistory.value.findIndex(m => m.id === assistantId);
-        if (index !== -1) {
-          chatHistory.value[index].content += chunk;
-        }
+        chatHistory.value[index].content += chunk;
       }
     }
   } catch (err: any) {
@@ -131,28 +99,22 @@ const sendMessage = async () => {
         </h2>
       </div>
       <div class="flex-1 overflow-y-auto p-4 space-y-2">
-        <div v-if="ingestedFiles.length === 0" class="text-xs text-neutral-400 text-center mt-6">
-          No files ingested yet.
-        </div>
-        <div v-for="fileName in ingestedFiles" :key="fileName" class="text-sm text-neutral-700 bg-neutral-50 border border-neutral-200 rounded-md px-3 py-2.5 shadow-sm flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500 shrink-0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-          <span class="truncate block w-full">{{ fileName }}</span>
+        <div class="text-xs text-neutral-400 text-center mt-6">
+          File upload is currently disabled.
         </div>
       </div>
       
       <div class="p-4 border-t border-neutral-100 bg-white/50 backdrop-blur-sm">
         <label 
-          class="cursor-pointer text-sm px-4 py-2 w-full rounded-md bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition-colors shadow-sm flex items-center justify-center gap-2"
-          :class="{'opacity-50 pointer-events-none': isIngesting}"
+          class="cursor-not-allowed text-sm px-4 py-2 w-full rounded-md bg-neutral-100 border border-neutral-200 text-neutral-400 shadow-sm flex items-center justify-center gap-2 opacity-60"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="17 8 12 3 7 8"></polyline>
             <line x1="12" y1="3" x2="12" y2="15"></line>
           </svg>
-          <span v-if="!isIngesting" class="font-medium text-neutral-600">Ingest File</span>
-          <span v-else class="font-medium text-neutral-600">Indexing...</span>
-          <input type="file" class="hidden" @change="handleFileUpload" accept=".txt,.md,.pdf,.csv,.json" :disabled="isIngesting" />
+          <span class="font-medium">Ingest File (Disabled)</span>
+          <input type="file" class="hidden" disabled />
         </label>
       </div>
     </aside>
