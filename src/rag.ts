@@ -104,12 +104,18 @@ export interface ChatMessage {
 export async function* ragChatStream(
   messages: ChatMessage[],
   model: string,
-  sessionId?: string
+  sessionId?: string,
+  fileId?: string
 ): AsyncGenerator<{ type: "sources"; sources: string[] } | { type: "token"; token: string }> {
   const res = await fetch(`${RAG_URL}/query/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, model, session_id: sessionId ?? null }),
+    body: JSON.stringify({
+      messages,
+      model,
+      session_id: sessionId ?? null,
+      file_id: fileId ?? null,
+    }),
   });
 
   if (!res.ok) throw new Error(await res.text());

@@ -20,26 +20,29 @@ router = APIRouter(prefix="/query", tags=["query"])
 class QueryRequest(BaseModel):
     question: str
     session_id: str | None = None   # if set, also searches session collection
+    file_id: str | None = None      # if set, filters results to this file
     top_k: int = 5
 
 
 class ChatRequest(BaseModel):
     messages: list[dict]            # [{role, content}, ...]
     session_id: str | None = None
+    file_id: str | None = None      # if set, filters results to this file
     model: str = OLLAMA_DEFAULT_MODEL
     top_k: int = 5
 
 
-def _retrieve(question: str, session_id: str | None, top_k: int) -> list[dict]:
+def _retrieve(question: str, session_id: str | None, top_k: int, file_id: str | None = None) -> list[dict]:
     """Embed question, search global + optional session collection, merge by score."""
     vector = embed_texts([question])[0]
     per_collection = max(top_k, 3)
 
-    hits = vector_store.search(GLOBAL_COLLECTION, vector, limit=per_collection)
+    hits = vector_store.search(GLOBAL_COLLECTION, vector, limit=per_collection, file_id=file_id)
 
     if session_id:
+        coll_name = session_id if session_id.startswith("session:") else f"session:{session_id}"
         session_hits = vector_store.search(
-            f"session:{session_id}", vector, limit=per_collection
+            coll_name, vector, limit=per_collection, file_id=file_id
         )
         hits = sorted(hits + session_hits, key=lambda h: h["score"], reverse=True)
 
@@ -49,7 +52,7 @@ def _retrieve(question: str, session_id: str | None, top_k: int) -> list[dict]:
 @router.post("")
 async def retrieve(req: QueryRequest):
     """Pure retrieval — returns context chunks and sources (no LLM call)."""
-    hits = _retrieve(req.question, req.session_id, req.top_k)
+    hits = _retrieve(req.question, req.session_id, req.top_k, req.file_id)
     return {
         "hits": hits,
         "context": "\n\n---\n\n".join(h["text"] for h in hits),
@@ -69,7 +72,7 @@ async def rag_chat(req: ChatRequest):
     last_user = next(
         (m["content"] for m in reversed(req.messages) if m["role"] == "user"), ""
     )
-    hits = _retrieve(last_user, req.session_id, req.top_k)
+    hits = _retrieve(last_user, req.session_id, req.top_k, req.file_id)
     context_block = "\n\n---\n\n".join(h["text"] for h in hits)
     sources = list({h["filename"] for h in hits})
 

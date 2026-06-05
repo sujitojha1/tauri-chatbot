@@ -44,11 +44,16 @@ def get_client() -> QdrantClient:
         return QdrantClient(path=local_db_path)
 
 
+def _clean(collection_name: str) -> str:
+    return collection_name.replace(":", "_")
+
+
 def _ensure_collection(collection: str):
     client = get_client()
+    clean_col = _clean(collection)
     try:
         client.create_collection(
-            collection_name=collection,
+            collection_name=clean_col,
             vectors_config=VectorParams(size=EMBEDDING_DIM, distance=Distance.COSINE),
         )
     except UnexpectedResponse as e:
@@ -65,6 +70,7 @@ def upsert_chunks(
 ):
     _ensure_collection(collection)
     client = get_client()
+    clean_col = _clean(collection)
 
     points = [
         PointStruct(
@@ -79,7 +85,7 @@ def upsert_chunks(
         )
         for i in range(len(chunks))
     ]
-    client.upsert(collection_name=collection, points=points)
+    client.upsert(collection_name=clean_col, points=points)
 
 
 def search(
@@ -89,8 +95,9 @@ def search(
     file_id: str | None = None,
 ) -> list[dict]:
     client = get_client()
+    clean_col = _clean(collection)
     existing = {c.name for c in client.get_collections().collections}
-    if collection not in existing:
+    if clean_col not in existing:
         return []
 
     query_filter = None
@@ -100,7 +107,7 @@ def search(
         )
 
     result = client.query_points(
-        collection_name=collection,
+        collection_name=clean_col,
         query=query_vector,
         limit=limit,
         query_filter=query_filter,
@@ -120,11 +127,12 @@ def search(
 
 def delete_file_vectors(collection: str, file_id: str):
     client = get_client()
+    clean_col = _clean(collection)
     existing = {c.name for c in client.get_collections().collections}
-    if collection not in existing:
+    if clean_col not in existing:
         return
     client.delete(
-        collection_name=collection,
+        collection_name=clean_col,
         points_selector=Filter(
             must=[FieldCondition(key="file_id", match=MatchValue(value=file_id))]
         ),
