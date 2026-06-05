@@ -160,6 +160,12 @@ const sessionFiles = ref<RagFile[]>([]);
 const sessionUploading = ref(false);
 const sessionFileInput = ref<HTMLInputElement | null>(null);
 
+// Which session's "three dots" options menu is currently open
+const openMenuSessionId = ref<string | null>(null);
+function toggleSessionMenu(id: string) {
+  openMenuSessionId.value = openMenuSessionId.value === id ? null : id;
+}
+
 async function refreshSessionFiles() {
   if (!ragAvailable.value || !currentSessionId.value) return;
   sessionFiles.value = await listFiles(currentSessionId.value);
@@ -168,6 +174,13 @@ async function refreshSessionFiles() {
 async function handleSessionUpload(event: Event) {
   const filesList = (event.target as HTMLInputElement).files;
   if (!filesList?.length || !currentSessionId.value) return;
+
+  // Name the session after the first uploaded file (without extension) if still default
+  const activeSess = sessions.value.find((s) => s.id === currentSessionId.value);
+  if (activeSess && activeSess.title === "Review design") {
+    const firstName = filesList[0].name.replace(/\.[^/.]+$/, "").trim();
+    if (firstName) activeSess.title = firstName;
+  }
 
   sessionUploading.value = true;
   for (const file of Array.from(filesList)) {
@@ -317,10 +330,14 @@ const sendMessage = async () => {
     isLoading.value = true;
 
     try {
+      // Scope retrieval to the collection the file actually lives in:
+      // global files sit in the global collection; session files in their session collection.
+      const fileCtx = selectedSpecFile.value.context;
+      const fileSessionId = fileCtx && fileCtx !== "global" ? fileCtx : undefined;
       const stream = ragChatStream(
         fileChatHistory.value[fileId].slice(0, -1).map(({ role, content }) => ({ role, content })),
         selectedModel.value,
-        undefined, // no session collection required
+        fileSessionId,
         fileId
       );
       for await (const event of stream) {
@@ -663,8 +680,11 @@ watch(selectedSpecFile, (newFile) => {
           <div class="mx-3 my-1.5 border-t border-slate-200/60 dark:border-slate-800/60"></div>
 
           <div class="recents-title">Recents</div>
+          <!-- Backdrop to close any open session menu on outside click -->
+          <div v-if="openMenuSessionId" class="fixed inset-0 z-40" @click="openMenuSessionId = null"></div>
+
           <div class="flex flex-col gap-2.5 px-2">
-            <div v-for="session in sessions" :key="session.id" class="flex flex-col">
+            <div v-for="session in sessions" :key="session.id" class="flex flex-col gap-1">
               <!-- Session title item -->
               <div
                 @click="currentSessionId = session.id"
@@ -674,13 +694,47 @@ watch(selectedSpecFile, (newFile) => {
                 <span class="truncate font-semibold text-[13px] select-none pr-6">
                   {{ session.title }}
                 </span>
+
+                <!-- Three-dot options trigger -->
                 <button
-                  @click.stop="deleteSession(session.id)"
-                  class="opacity-0 group-hover:opacity-100 hover:text-rose-500 text-slate-400 dark:text-slate-500 cursor-pointer p-0.5 rounded transition-all shrink-0 absolute right-2"
-                  title="Delete session"
+                  @click.stop="toggleSessionMenu(session.id)"
+                  class="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer p-0.5 rounded transition-all shrink-0 absolute right-2"
+                  :class="{ '!opacity-100': openMenuSessionId === session.id }"
+                  title="Options"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" /></svg>
                 </button>
+
+                <!-- Options dropdown -->
+                <div
+                  v-if="openMenuSessionId === session.id"
+                  class="absolute right-2 top-9 z-50 min-w-[140px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg py-1"
+                  @click.stop
+                >
+                  <button
+                    @click="openMenuSessionId = null; deleteSession(session.id)"
+                    class="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></svg>
+                    Delete
+                  </button>
+                </div>
+              </div>
+
+              <!-- Uploaded files for this session -->
+              <div v-if="session.files && session.files.length > 0" class="flex flex-col gap-0.5 pl-3.5 mt-0.5">
+                <div
+                  v-for="file in session.files"
+                  :key="file.id"
+                  class="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 py-0.5 px-1.5 rounded-md"
+                  :title="file.filename"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 text-slate-400 dark:text-slate-500">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span class="truncate flex-1 min-w-0">{{ file.filename }}</span>
+                  <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusDot(file.status)"></span>
+                </div>
               </div>
             </div>
           </div>
@@ -702,11 +756,11 @@ watch(selectedSpecFile, (newFile) => {
 
           <div class="mx-3 my-1.5 border-t border-slate-200/60 dark:border-slate-800/60"></div>
           
-          <!-- Files List in Specs Sidebar -->
+          <!-- Files List in Specs Sidebar (global + current session) -->
           <div class="recents-title !pt-0">Files</div>
           <div class="space-y-0.5 overflow-y-auto min-h-0 flex-1 px-1">
             <div
-              v-for="file in globalFiles"
+              v-for="file in allFiles"
               :key="file.id"
               class="claude-history-item group relative flex items-center justify-between !my-0.5 cursor-pointer"
               :class="{ 'active': selectedSpecFile && selectedSpecFile.id === file.id }"
@@ -716,19 +770,23 @@ watch(selectedSpecFile, (newFile) => {
                 <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-455 dark:text-slate-500 shrink-0">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
                 </svg>
-                <span class="truncate font-medium text-[12px] pr-4" :title="file.filename">{{ file.filename }}</span>
+                <span class="truncate font-medium text-[12px]" :title="file.filename">{{ file.filename }}</span>
+                <span class="shrink-0 text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                  :class="file.context === 'global' ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'">
+                  {{ file.context === 'global' ? 'Global' : 'Review' }}
+                </span>
               </div>
               <span class="w-1.5 h-1.5 rounded-full shrink-0 mr-1" :class="statusDot(file.status)"></span>
               <button
                 @click.stop="handleDeleteFileUnified(file)"
-                class="opacity-0 group-hover:opacity-100 hover:text-rose-500 text-slate-400 cursor-pointer p-0.5 rounded transition-all shrink-0 absolute right-2"
+                class="opacity-0 group-hover:opacity-100 hover:text-rose-500 text-slate-400 cursor-pointer p-0.5 rounded transition-all shrink-0 absolute right-2 bg-inherit"
                 title="Delete document"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></svg>
               </button>
             </div>
-            
-            <div v-if="globalFiles.length === 0" class="text-center py-8 text-[11.5px] text-slate-400 dark:text-slate-500 font-medium select-none">
+
+            <div v-if="allFiles.length === 0" class="text-center py-8 text-[11.5px] text-slate-400 dark:text-slate-500 font-medium select-none">
               No specifications uploaded
             </div>
           </div>
@@ -804,22 +862,26 @@ watch(selectedSpecFile, (newFile) => {
 
             <!-- Upload Specs inline area -->
             <div class="w-full bg-white dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 rounded-2xl p-4 text-left">
-              <span class="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Session specification files</span>
-              <div v-if="sessionFiles.length > 0" class="mt-2 space-y-2">
-                <div v-for="file in sessionFiles" :key="file.id" class="flex items-center justify-between text-xs py-1 border-b border-slate-100 dark:border-slate-800/50">
-                  <span class="truncate font-semibold text-slate-700 dark:text-slate-300 pr-3">{{ file.filename }}</span>
+              <span class="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Specification files for this review</span>
+              <div v-if="allFiles.length > 0" class="mt-2 space-y-2">
+                <div v-for="file in allFiles" :key="file.id" class="flex items-center justify-between gap-2 text-xs py-1 border-b border-slate-100 dark:border-slate-800/50">
+                  <span class="truncate font-semibold text-slate-700 dark:text-slate-300 flex-1 min-w-0" :title="file.filename">{{ file.filename }}</span>
+                  <span class="shrink-0 text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                    :class="file.context === 'global' ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'">
+                    {{ file.context === 'global' ? 'Global' : 'Review' }}
+                  </span>
                   <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusDot(file.status)"></span>
                 </div>
               </div>
               <div v-else class="text-xs text-slate-400 dark:text-slate-500 py-4 text-center font-medium">
-                No session spec files uploaded yet. Add them in the Specs tab or using the button below.
+                No spec files yet. Add them with the button below, or upload global specs in the Specs tab.
               </div>
 
               <!-- Upload button trigger -->
               <label class="mt-3 cursor-pointer w-full flex items-center justify-center gap-1.5 py-2 px-3 border border-dashed border-slate-200 hover:border-slate-400 dark:border-slate-800 dark:hover:border-slate-600 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all">
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                 Upload File for Review
-                <input type="file" class="hidden" multiple accept=".pdf,.docx,.txt,.md,.html,.pptx,.xlsx" @change="handleSessionUpload" />
+                <input ref="sessionFileInput" type="file" class="hidden" multiple accept=".pdf,.docx,.txt,.md,.html,.pptx,.xlsx" @change="handleSessionUpload" />
               </label>
             </div>
 

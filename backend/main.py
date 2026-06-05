@@ -29,10 +29,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Allow Tauri frontend (localhost any port) and browser dev server
+# Allow the Tauri webview (origin differs per platform/build) and the browser dev server.
+#   - dev server:        http://localhost:1420 / :5173
+#   - macOS/Linux build: tauri://localhost
+#   - Windows (WebView2) build: http://tauri.localhost / https://tauri.localhost
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:1420", "http://localhost:5173", "tauri://localhost"],
+    allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1|tauri\.localhost)(:\d+)?|tauri://localhost)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
