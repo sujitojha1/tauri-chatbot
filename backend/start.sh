@@ -17,12 +17,18 @@ echo "Installing dependencies..."
 pip install -q -r requirements.txt
 
 echo ""
-echo "Starting Qdrant (Docker)..."
-if ! docker ps --format '{{.Names}}' | grep -q '^qdrant$'; then
-  docker run -d --name qdrant -p 6333:6333 -v "$(pwd)/qdrant_data:/qdrant/storage" qdrant/qdrant
-  echo "Qdrant started."
+echo "Checking Docker..."
+if docker info >/dev/null 2>&1; then
+  echo "Docker is running. Starting Qdrant (Docker)..."
+  if ! docker ps --format '{{.Names}}' | grep -q '^qdrant$'; then
+    docker run -d --name qdrant -p 6333:6333 -v "$(pwd)/qdrant_data:/qdrant/storage" qdrant/qdrant
+    echo "Qdrant started."
+  else
+    echo "Qdrant already running."
+  fi
 else
-  echo "Qdrant already running."
+  echo "Docker daemon is offline or not installed."
+  echo "RAG backend will run using local fallback mode (no Docker required!)."
 fi
 
 echo ""

@@ -21,9 +21,27 @@ from qdrant_client.models import (
 from config import QDRANT_HOST, QDRANT_PORT, EMBEDDING_DIM
 
 
+import logging
+
+logger = logging.getLogger("vector_store")
+
 @lru_cache(maxsize=1)
 def get_client() -> QdrantClient:
-    return QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+    try:
+        # Attempt connection to Qdrant Docker container
+        client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT, timeout=2.0)
+        client.get_collections() # verify connection works
+        return client
+    except Exception as e:
+        import os
+        from config import BASE_DIR
+        local_db_path = os.path.join(BASE_DIR, "qdrant_local_data")
+        logger.warning(
+            f"Could not connect to Qdrant at {QDRANT_HOST}:{QDRANT_PORT}. "
+            f"Falling back to local SQLite-backed Qdrant mode at {local_db_path}. "
+            f"Error: {e}"
+        )
+        return QdrantClient(path=local_db_path)
 
 
 def _ensure_collection(collection: str):

@@ -45,7 +45,7 @@ A local-first desktop chatbot with RAG (Retrieval-Augmented Generation) built on
 | Dependency | Version | Notes |
 |---|---|---|
 | [Rust](https://www.rust-lang.org/tools/install) | stable | Required by Tauri |
-| [Node.js](https://nodejs.org/) | 18+ | Frontend build |
+| [Bun](https://bun.sh/) | 1.1+ | Package manager and frontend runtime |
 | [Python](https://python.org/) | 3.11+ | RAG backend |
 | [Docker](https://www.docker.com/) | any | Runs Qdrant |
 | [Ollama](https://ollama.com/) | any | LLM + embeddings |
@@ -61,14 +61,21 @@ ollama pull nomic-embed-text    # embeddings (required for RAG)
 
 ### 1. Start the RAG backend
 
+On Linux/macOS (Bash):
 ```bash
 cd backend
 ./start.sh
 ```
 
+On Windows (PowerShell):
+```powershell
+cd backend
+.\start.ps1
+```
+
 This will:
-- Create a Python venv and install dependencies
-- Start Qdrant in Docker (`qdrant/qdrant` on port 6333)
+- Create a Python virtual environment and install dependencies
+- Detect if Docker is running; if so, it spins up the Qdrant container. If Docker is offline, the backend seamlessly falls back to a **local SQLite-backed Qdrant engine** (no Docker required!)
 - Start the FastAPI server on `http://localhost:8000`
 
 API docs are available at `http://localhost:8000/docs`.
@@ -78,14 +85,14 @@ API docs are available at `http://localhost:8000/docs`.
 In a separate terminal from the project root:
 
 ```bash
-npm install
-npm run tauri dev
+bun install
+bun run tauri dev
 ```
 
 ### Building for production
 
 ```bash
-npm run tauri build
+bun run tauri build
 ```
 
 The packaged app (`.dmg` / `.app` on macOS) will be in `src-tauri/target/release/bundle/`.
