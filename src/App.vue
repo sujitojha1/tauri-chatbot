@@ -11,6 +11,7 @@ import {
   type FileStatus,
 } from "./rag";
 import { marked } from "marked";
+import appLogo from "./assets/app_logo.png";
 
 // ── Theme toggle ───────────────────────────────────────────────────────────────
 const THEME_STORE_KEY = "local-ai-theme-choice";
@@ -21,12 +22,17 @@ function toggleTheme() {
   updateThemeClass();
 }
 
+// Active Tab in Sidebar ("chat" | "rag")
+const activeTab = ref<"chat" | "rag">("chat");
+
 function updateThemeClass() {
   if (isDarkMode.value) {
     document.documentElement.classList.add("dark");
+    document.body.classList.add("dark");
     localStorage.setItem(THEME_STORE_KEY, "dark");
   } else {
     document.documentElement.classList.remove("dark");
+    document.body.classList.remove("dark");
     localStorage.setItem(THEME_STORE_KEY, "light");
   }
 }
@@ -174,36 +180,16 @@ async function handleDeleteSession(file: RagFile) {
 }
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
-function statusColor(s: FileStatus): string {
-  return (
-    {
-      pending: "text-slate-400 dark:text-slate-500",
-      processing: "text-amber-500 dark:text-amber-400",
-      chunked: "text-indigo-500 dark:text-indigo-400",
-      indexed: "text-emerald-500 dark:text-emerald-400",
-      failed: "text-rose-500 dark:text-rose-400",
-    }[s] ?? "text-slate-400"
-  );
-}
-
 function statusDot(s: FileStatus): string {
   return (
     {
-      pending: "bg-slate-300 dark:bg-slate-600",
+      pending: "bg-slate-300 dark:bg-slate-650",
       processing: "bg-amber-400 animate-pulse",
       chunked: "bg-indigo-400 animate-pulse",
-      indexed: "bg-emerald-400 dark:bg-emerald-500",
-      failed: "bg-rose-400 dark:bg-rose-500",
+      indexed: "bg-emerald-500 dark:bg-emerald-450",
+      failed: "bg-rose-500 dark:bg-rose-450",
     }[s] ?? "bg-slate-300"
   );
-}
-
-function statusLabel(f: RagFile): string {
-  if (f.status === "indexed") return `${f.total_chunks} chunks`;
-  if (f.status === "chunked") return `chunking…`;
-  if (f.status === "processing") return "parsing…";
-  if (f.status === "failed") return "failed";
-  return "pending";
 }
 
 const hasIndexedFiles = computed(
@@ -212,11 +198,40 @@ const hasIndexedFiles = computed(
     sessionFiles.value.some((f) => f.status === "indexed")
 );
 
+const allFiles = computed(() => {
+  const unique = new Map<string, RagFile>();
+  globalFiles.value.forEach(f => unique.set(f.id, f));
+  sessionFiles.value.forEach(f => unique.set(f.id, f));
+  return Array.from(unique.values());
+});
+
+async function handleDeleteFileUnified(file: RagFile) {
+  watchers[file.id]?.();
+  delete watchers[file.id];
+  await deleteFile(file.id);
+  globalFiles.value = globalFiles.value.filter((f) => f.id !== file.id);
+  sessionFiles.value = sessionFiles.value.filter((f) => f.id !== file.id);
+}
+
 // ── Chat ───────────────────────────────────────────────────────────────────────
+const showScrollDown = ref(false);
+
+const handleScroll = (e: Event) => {
+  const target = e.target as HTMLElement;
+  showScrollDown.value = target.scrollHeight - target.scrollTop - target.clientHeight > 100;
+};
+
+const copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text).catch(err => {
+    console.error("Failed to copy text: ", err);
+  });
+};
+
 const scrollToBottom = () => {
   nextTick(() => {
     if (chatContainer.value) {
       chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+      showScrollDown.value = false;
     }
   });
 };
@@ -318,230 +333,151 @@ onUnmounted(() => {
 
 watch(selectedModel, (v) => localStorage.setItem(MODEL_STORE_KEY, v));
 watch(chatHistory, scrollToBottom, { deep: true });
-</script>
+</script><template>
+  <div :class="{ 'dark': isDarkMode }" class="layout-container font-sans transition-colors duration-300">
+    
+    <!-- ── Minimal Technical Drafting & Glow Backgrounds ── -->
+    <div class="bg-decorations">
+      <div class="drafting-grid"></div>
+      <div class="drafting-circles"></div>
+      <div class="orange-glow"></div>
+    </div>
 
-<template>
-  <div :class="{ 'dark': isDarkMode }" class="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300 font-sans">
-
-    <!-- ── Left Sidebar ──────────────────────────────────────────────────────── -->
-    <aside class="w-64 border-r border-slate-200/60 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 backdrop-blur-md hidden md:flex flex-col shrink-0 z-20 transition-all duration-300">
-      <!-- Sidebar header -->
-      <div class="px-4 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-white/50 dark:bg-slate-900/40">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <div class="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/10">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-              </svg>
-            </div>
-            <div>
-              <h2 class="font-display font-bold text-slate-800 dark:text-slate-100 text-sm tracking-wide leading-none">
-                PD <span class="text-indigo-600 dark:text-indigo-400">Checker</span>
-              </h2>
-              <span class="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5 block">Local RAG</span>
-            </div>
-          </div>
-          <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/20">
-            <span class="w-1.5 h-1.5 rounded-full" :class="ragAvailable ? 'bg-emerald-400' : 'bg-slate-300 dark:bg-slate-600'"></span>
-            <span class="text-[9px] font-semibold tracking-wider uppercase" :class="ragAvailable ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'">
-              {{ ragAvailable ? 'online' : 'offline' }}
-            </span>
-          </div>
+    <!-- ── Left Sidebar (Claude Flat Panel) ──────────────────────────────────── -->
+    <aside class="claude-sidebar hidden md:flex flex-col z-10 transition-all duration-300">
+      
+      <!-- Chrome Controls Bar -->
+      <div class="sidebar-chrome shrink-0">
+        <div class="chrome-left">
+          <button class="chrome-btn" title="Menu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <button class="chrome-btn" title="Toggle Sidebar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+          </button>
+          <button class="chrome-btn" title="Search">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </button>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button class="chrome-btn" title="Go back">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          </button>
+          <button class="chrome-btn" title="Go forward">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
         </div>
       </div>
 
+      <!-- Segmented Tab block -->
+      <div class="claude-tabs-block shrink-0">
+        <div class="segmented-control">
+          <button @click="activeTab = 'chat'" class="segmented-tab" :class="{ 'active': activeTab === 'chat' }">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+            Chat
+          </button>
+          <button @click="activeTab = 'rag'" class="segmented-tab" :class="{ 'active': activeTab === 'rag', 'opacity-50': !ragAvailable }">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+            Specs
+          </button>
+        </div>
+      </div>
+
+      <!-- Action items -->
+      <div class="claude-sidebar-actions-list shrink-0">
+        <button @click="startFreshChat" class="claude-action-item">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+          <span>New chat</span>
+        </button>
+      </div>
+
+      <!-- Sidebar content scrolling list -->
       <div class="flex-1 overflow-y-auto flex flex-col min-h-0 py-2">
-
-        <!-- ── Global section ── -->
-        <div class="flex flex-col min-h-0">
-          <div class="flex items-center justify-between px-4 py-2">
-            <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Global Store</span>
-            <label
-              class="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border transition-all active:scale-95"
-              :class="ragAvailable && !globalUploading
-                ? 'cursor-pointer bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-                : 'cursor-not-allowed bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-300 dark:text-slate-700'"
-              title="Add to global knowledge base"
-            >
-              <svg v-if="globalUploading" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                class="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              {{ globalUploading ? 'Adding…' : 'Add' }}
-              <input ref="globalFileInput" type="file" class="hidden" multiple
-                accept=".pdf,.docx,.txt,.md,.html,.pptx,.xlsx"
-                :disabled="!ragAvailable || globalUploading" @change="handleGlobalUpload" />
-            </label>
-          </div>
-
-          <div class="px-3 pb-3 space-y-2">
-            <template v-if="!ragAvailable">
-              <div class="bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 rounded-xl p-4 text-center">
-                <p class="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed font-medium">
-                  Start the RAG backend server to enable global document indexing.
-                </p>
-              </div>
-            </template>
-            <template v-else-if="globalFiles.length === 0">
-              <div class="border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl py-6 text-center">
-                <p class="text-[10px] font-medium text-slate-400 dark:text-slate-500">No global files indexed</p>
-              </div>
-            </template>
-            
-            <!-- Ingested Global File Card -->
-            <div v-for="file in globalFiles" :key="file.id"
-              class="group relative bg-white dark:bg-slate-900/40 border border-slate-150 dark:border-slate-800/70 rounded-xl p-3 hover:border-slate-300 dark:hover:border-slate-700/80 shadow-sm hover:shadow transition-all duration-200 ease-out">
-              <div class="flex items-start justify-between gap-2">
-                <div class="flex items-center gap-1.5 truncate flex-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-400 dark:text-slate-500 shrink-0">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
-                  </svg>
-                  <span class="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate" :title="file.filename">
-                    {{ file.filename }}
-                  </span>
-                </div>
-                <button @click="handleDeleteGlobal(file)"
-                  class="opacity-0 group-hover:opacity-100 transition-all p-1 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-400 hover:text-rose-500 rounded-md shrink-0 cursor-pointer"
-                  title="Remove document">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                </button>
-              </div>
-              <div class="mt-2 flex items-center justify-between gap-1">
-                <span class="text-[10px] font-semibold text-slate-400 dark:text-slate-500">{{ file.size_human }}</span>
-                <div class="flex items-center gap-1">
-                  <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusDot(file.status)"></span>
-                  <span class="text-[10px] font-bold" :class="statusColor(file.status)">{{ statusLabel(file) }}</span>
-                </div>
-              </div>
-              <div v-if="['pending','processing','chunked'].includes(file.status)"
-                class="mt-2 h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div class="h-full bg-indigo-500 animate-pulse rounded-full w-3/4"></div>
-              </div>
-              <p v-if="file.error" class="mt-1.5 text-[9px] font-semibold text-rose-500 truncate" :title="file.error">
-                Error: {{ file.error }}
-              </p>
-            </div>
+        
+        <!-- Tab 1: Chat list -->
+        <div v-show="activeTab === 'chat'" class="flex flex-col">
+          <div class="recents-title">Recents</div>
+          <div class="claude-history-item active truncate">
+            <span class="truncate font-semibold text-[13px]">{{ chatHistory[1] ? chatHistory[1].content.substring(0, 32) + (chatHistory[1].content.length > 32 ? '...' : '') : 'Local RAG Chat' }}</span>
           </div>
         </div>
 
-        <!-- ── Divider ── -->
-        <div class="mx-4 my-2 border-t border-slate-100 dark:border-slate-800/80"></div>
-
-        <!-- ── Session section ── -->
-        <div class="flex flex-col min-h-0">
-          <div class="flex items-center justify-between px-4 py-2">
-            <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Session Store</span>
-            <label v-if="ragAvailable"
-              class="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border transition-all active:scale-95 cursor-pointer bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-              :class="sessionUploading ? 'opacity-60 pointer-events-none' : ''"
-              title="Add temporary files to this session only"
+        <!-- Tab 2: Specs file manager -->
+        <div v-show="activeTab === 'rag'" class="flex flex-col gap-2">
+          <!-- Upload Specs Button Action -->
+          <div class="px-2 py-1 shrink-0">
+            <label
+              class="claude-action-item cursor-pointer w-full flex items-center gap-2"
+              :class="globalUploading ? 'opacity-50 pointer-events-none' : ''"
             >
-              <svg v-if="sessionUploading" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                class="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              {{ sessionUploading ? 'Adding…' : 'Add' }}
-              <input ref="sessionFileInput" type="file" class="hidden" multiple
-                accept=".pdf,.docx,.txt,.md,.html,.pptx,.xlsx"
-                :disabled="sessionUploading" @change="handleSessionUpload" />
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Upload specs</span>
+              <input ref="globalFileInput" type="file" class="hidden" multiple accept=".pdf,.docx,.txt,.md,.html,.pptx,.xlsx" @change="handleGlobalUpload" />
             </label>
           </div>
 
-          <div class="px-3 pb-3 space-y-2">
-            <template v-if="!ragAvailable">
-              <div class="bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60 rounded-xl p-4 text-center">
-                <p class="text-[10px] text-slate-400 dark:text-slate-500 font-medium">Session store requires RAG server.</p>
+          <!-- File List -->
+          <div class="space-y-0.5 mt-2 overflow-y-auto min-h-0 flex-1">
+            <div v-for="file in allFiles" :key="file.id" class="claude-history-item group relative">
+              <div class="flex items-center gap-2 truncate flex-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-455 dark:text-slate-500 shrink-0">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span class="truncate font-medium text-[12px] text-slate-700 dark:text-slate-300" :title="file.filename">{{ file.filename }}</span>
               </div>
-            </template>
-            <template v-else-if="sessionFiles.length === 0">
-              <div class="border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl py-6 text-center">
-                <p class="text-[10px] font-medium text-slate-400 dark:text-slate-500">Session store is empty</p>
-              </div>
-            </template>
+              <span class="w-1.5 h-1.5 rounded-full shrink-0 mr-1.5" :class="statusDot(file.status)"></span>
+              <button @click.stop="handleDeleteFileUnified(file)" class="opacity-0 group-hover:opacity-100 hover:text-rose-500 text-slate-450 cursor-pointer p-0.5 rounded transition-all shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></svg>
+              </button>
+            </div>
             
-            <!-- Ingested Session File Card -->
-            <div v-for="file in sessionFiles" :key="file.id"
-              class="group relative bg-blue-50/20 dark:bg-indigo-950/15 border border-indigo-100/40 dark:border-indigo-900/30 rounded-xl p-3 hover:border-indigo-200 dark:hover:border-indigo-800/80 shadow-sm hover:shadow transition-all duration-200 ease-out">
-              <div class="flex items-start justify-between gap-2">
-                <div class="flex items-center gap-1.5 truncate flex-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-indigo-400 dark:text-indigo-500 shrink-0">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
-                  </svg>
-                  <span class="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate" :title="file.filename">
-                    {{ file.filename }}
-                  </span>
-                </div>
-                <button @click="handleDeleteSession(file)"
-                  class="opacity-0 group-hover:opacity-100 transition-all p-1 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-400 hover:text-rose-500 rounded-md shrink-0 cursor-pointer"
-                  title="Remove document">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                </button>
-              </div>
-              <div class="mt-2 flex items-center justify-between gap-1">
-                <span class="text-[10px] font-semibold text-slate-400 dark:text-slate-500">{{ file.size_human }}</span>
-                <div class="flex items-center gap-1">
-                  <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusDot(file.status)"></span>
-                  <span class="text-[10px] font-bold" :class="statusColor(file.status)">{{ statusLabel(file) }}</span>
-                </div>
-              </div>
-              <div v-if="['pending','processing','chunked'].includes(file.status)"
-                class="mt-2 h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div class="h-full bg-indigo-500 animate-pulse rounded-full w-3/4"></div>
-              </div>
-              <p v-if="file.error" class="mt-1.5 text-[9px] font-semibold text-rose-500 truncate" :title="file.error">
-                Error: {{ file.error }}
-              </p>
+            <div v-if="allFiles.length === 0" class="text-center py-8 text-[11.5px] text-slate-400 dark:text-slate-500 font-medium select-none">
+              No specifications uploaded
             </div>
           </div>
         </div>
 
       </div>
+
+      <!-- Bottom Profile Bar -->
+      <div class="claude-profile-container shrink-0">
+        <div class="profile-info">
+          <div class="profile-avatar select-none">so</div>
+          <div class="profile-meta">
+            Sujit <span class="pro-badge">· Pro</span>
+          </div>
+        </div>
+      </div>
+
     </aside>
 
-    <!-- ── Main Chat Area ───────────────────────────────────────────────────── -->
-    <main class="flex flex-1 flex-col h-full overflow-hidden relative bg-slate-50/40 dark:bg-slate-950/40">
+    <!-- ── Main Chat Area (Claude Flat Main) ─────────────────────────────────── -->
+    <main class="claude-main">
 
       <!-- Header -->
-      <header class="flex items-center justify-between px-6 py-3 border-b border-slate-200/50 dark:border-slate-800/80 bg-white/75 dark:bg-slate-900/55 backdrop-blur-md z-10 w-full shadow-sm gap-3 transition-colors duration-300">
-        <div class="flex items-center gap-3 min-w-0">
-          <div
-            class="w-2.5 h-2.5 rounded-full shadow-sm shrink-0"
-            :class="isLoading ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'"
-          ></div>
-          
-          <!-- Badge displaying active model -->
-          <div class="flex items-center gap-2 font-mono text-xs bg-slate-100 dark:bg-slate-800/80 border border-slate-200/40 dark:border-slate-700/50 px-2.5 py-1 rounded-lg font-semibold text-slate-700 dark:text-slate-300">
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-indigo-500">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
-            </svg>
-            {{ selectedModel }}
-          </div>
-          
-          <!-- RAG mode pill -->
-          <span v-if="ragAvailable && hasIndexedFiles"
-            class="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-250 dark:border-emerald-900/30 shrink-0">
-            <span class="w-1 h-1 bg-emerald-400 dark:bg-emerald-500 rounded-full animate-ping"></span>RAG ACTIVE
+      <header class="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900/10 z-10 w-full transition-colors duration-300 shrink-0">
+        <div class="flex items-center gap-2 min-w-0 cursor-pointer text-slate-800 dark:text-slate-100 hover:opacity-85 transition-all">
+          <span class="font-display font-extrabold text-sm tracking-wide">
+            {{ activeTab === 'rag' ? 'Document Database' : (chatHistory[1] ? chatHistory[1].content.substring(0, 45) + (chatHistory[1].content.length > 45 ? '...' : '') : 'Gradient descent step for linear regression') }}
           </span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="ml-0.5 text-slate-400"><polyline points="6 9 12 15 18 9" /></svg>
+          <span v-if="isLoading" class="ml-3 text-[9px] font-bold tracking-widest text-indigo-600 dark:text-indigo-400 uppercase animate-pulse">generating…</span>
         </div>
 
-        <div class="flex items-center gap-3 shrink-0">
+        <div class="flex items-center gap-3.5 shrink-0">
+          <!-- Document list icon & Share button -->
+          <button class="chrome-btn text-slate-500 hover:text-slate-800" title="Attached resources">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </button>
+          <button class="chrome-btn text-slate-500 hover:text-slate-800" title="Share chat">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          </button>
+
           <!-- Model selector dropdown -->
           <div class="relative">
             <select
               v-model="selectedModel"
-              class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-500/60 transition-all appearance-none cursor-pointer pr-8 shadow-sm"
+              class="text-xs font-bold px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-800/80 focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-500/60 transition-all appearance-none cursor-pointer pr-8 shadow-sm"
               style="background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2214%22 height=%2214%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364748b%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><polyline points=%226 9 12 15 18 9%22></polyline></svg>'); background-repeat: no-repeat; background-position: right 0.6rem center; background-size: 0.9em;"
             >
               <option v-for="mod in availableModels" :key="mod" :value="mod">{{ mod }}</option>
@@ -549,90 +485,20 @@ watch(chatHistory, scrollToBottom, { deep: true });
           </div>
 
           <!-- Actions -->
-          <button @click="startFreshChat" class="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-850 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-all active:scale-95" title="Clear Chat History">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <button @click="startFreshChat" class="chrome-btn text-slate-500 hover:text-slate-800" title="Clear Chat History">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M16 3h5v5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 21H3v-5" />
             </svg>
           </button>
 
-          <!-- Theme toggle button -->
-          <button @click="toggleTheme" class="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-850 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-all active:scale-90" :title="isDarkMode ? 'Light Mode' : 'Dark Mode'">
-            <svg v-if="isDarkMode" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-amber-400 rotate-0 transition-transform duration-300">
-              <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-            </svg>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-slate-600 rotate-12 transition-transform duration-300">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          </button>
         </div>
       </header>
 
-      <!-- Chat messages -->
-      <div ref="chatContainer" class="flex-1 overflow-y-auto px-6 py-6 space-y-6 flex flex-col scroll-smooth items-center">
+      <!-- Chat messages container -->
+      <div ref="chatContainer" @scroll="handleScroll" class="flex-1 overflow-y-auto px-6 py-8 space-y-8 flex flex-col scroll-smooth items-center">
         
-        <!-- Welcome Screen Dashboard (shows only when chat history contains only the greeting) -->
-        <div v-if="chatHistory.length <= 1" class="w-full max-w-2xl my-auto py-8 animate-slide-up">
-          <div class="text-center mb-8">
-            <div class="w-12 h-12 rounded-2xl bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center text-white mx-auto shadow-xl shadow-indigo-600/20 mb-4 animate-bounce" style="animation-duration: 3s">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-            </div>
-            <h1 class="font-display font-extrabold text-2xl sm:text-3xl text-slate-800 dark:text-slate-100 tracking-tight">
-              PD Checker <span class="bg-gradient-to-r from-indigo-500 to-indigo-600 dark:from-indigo-400 dark:to-indigo-500 bg-clip-text text-transparent">Desktop</span>
-            </h1>
-            <p class="mt-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
-              A private, local-first RAG chat assistant running entirely on your machine.
-            </p>
-          </div>
-
-          <!-- Feature Cards Grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            
-            <div class="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 rounded-2xl p-4 shadow-sm hover:shadow hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200">
-              <div class="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-3">
-                <svg xmlns="http://www.w3.org/2051/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-              </div>
-              <h3 class="font-semibold text-xs text-slate-800 dark:text-slate-200 tracking-wide uppercase">100% Private & Local</h3>
-              <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                All document files, vector database instances, and chat inference run on your localhost.
-              </p>
-            </div>
-
-            <div class="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 rounded-2xl p-4 shadow-sm hover:shadow hover:border-slate-300 dark:hover:border-slate-700/80 transition-all duration-200">
-              <div class="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-3">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                </svg>
-              </div>
-              <h3 class="font-semibold text-xs text-slate-800 dark:text-slate-200 tracking-wide uppercase">Document Ingestion</h3>
-              <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                Upload PDFs, DOCX, TXT, or markdown. Ask questions grounded dynamically in your database.
-              </p>
-            </div>
-          </div>
-          
-          <!-- System Status Details -->
-          <div class="mt-6 p-4 rounded-2xl bg-slate-100/60 dark:bg-slate-900/40 border border-slate-200/20 flex flex-col gap-2.5">
-            <div class="flex items-center justify-between text-xs font-semibold">
-              <span class="text-slate-500 dark:text-slate-400">Ollama API Status</span>
-              <span :class="availableModels.length > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'" class="flex items-center gap-1.5">
-                <span class="w-1.5 h-1.5 rounded-full" :class="availableModels.length > 0 ? 'bg-emerald-400' : 'bg-rose-400 animate-ping'"></span>
-                {{ availableModels.length > 0 ? `${availableModels.length} models loaded` : 'Disconnected (Check Ollama)' }}
-              </span>
-            </div>
-            
-            <div class="flex items-center justify-between text-xs font-semibold">
-              <span class="text-slate-500 dark:text-slate-400">RAG Server Connection</span>
-              <span :class="ragAvailable ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500'" class="flex items-center gap-1.5">
-                <span class="w-1.5 h-1.5 rounded-full" :class="ragAvailable ? 'bg-emerald-400' : 'bg-amber-400'"></span>
-                {{ ragAvailable ? 'Connected' : 'Offline (FastAPI server not running)' }}
-              </span>
-            </div>
-          </div>
-        </div>
+        <!-- Welcome Screen Dashboard -->
+        <div v-if="chatHistory.length <= 1" class="w-full max-w-2xl my-auto py-8"></div>
 
         <!-- Rendered Chat History List -->
         <template v-else>
@@ -642,76 +508,134 @@ watch(chatHistory, scrollToBottom, { deep: true });
             class="w-full max-w-3xl flex"
             :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
           >
-            <!-- User bubble -->
-            <div v-if="msg.role === 'user'"
-              class="max-w-[85%] rounded-2xl rounded-tr-sm px-4.5 py-3 shadow-md shadow-indigo-500/5 bg-indigo-650 text-white font-medium text-[13px] leading-relaxed animate-slide-up"
-            >
-              {{ msg.content }}
+            <!-- User block container -->
+            <div v-if="msg.role === 'user'" class="flex flex-col items-end gap-2 max-w-[75%]">
+              
+              <!-- Attached Document Card (Matching reference design) -->
+              <div v-if="msg.id === chatHistory[1]?.id && hasIndexedFiles" class="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3 shadow-sm select-none self-end max-w-sm mb-1">
+                <div class="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/20 flex items-center justify-center text-rose-500 shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+                </div>
+                <div class="flex-1 min-w-0 pr-4">
+                  <p class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate leading-snug">BoardingPass.pdf</p>
+                  <span class="text-[9px] font-bold text-rose-500 uppercase tracking-widest mt-0.5 block">PDF</span>
+                </div>
+              </div>
+
+              <!-- Actual User Bubble -->
+              <div class="claude-bubble-user animate-slide-up">
+                {{ msg.content }}
+              </div>
             </div>
 
-            <!-- Assistant bubble -->
+            <!-- Assistant bubble (Bubble-less Raw text) -->
             <div v-else
-              class="w-full max-w-[85%] rounded-2xl rounded-tl-sm px-5 py-4.5 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 text-slate-800 dark:text-slate-250 shadow-sm animate-slide-up relative"
+              class="w-full max-w-3xl flex flex-col gap-1 items-start"
             >
-              <!-- Typing Indicator inside bubble -->
-              <div v-if="msg.content === '' && isLoading" class="flex items-center space-x-1.5 py-1 w-8">
-                <div class="w-1.5 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full animate-bounce"></div>
-                <div class="w-1.5 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full animate-bounce" style="animation-delay:0.15s"></div>
-                <div class="w-1.5 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full animate-bounce" style="animation-delay:0.3s"></div>
+              <div class="claude-text-assistant animate-slide-up relative">
+                <!-- Typing Indicator inside text -->
+                <div v-if="msg.content === '' && isLoading" class="flex items-center space-x-1.5 py-2 w-8">
+                  <div class="w-1.5 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full animate-bounce"></div>
+                  <div class="w-1.5 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full animate-bounce" style="animation-delay:0.15s"></div>
+                  <div class="w-1.5 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full animate-bounce" style="animation-delay:0.3s"></div>
+                </div>
+                
+                <!-- Serif Markdown parsing of Assistant content -->
+                <div
+                  v-else
+                  class="claude-prose"
+                  v-html="marked.parse(msg.content)"
+                ></div>
               </div>
               
-              <!-- Markdown parsing of Assistant content -->
-              <div
-                v-else
-                class="text-[13px] leading-relaxed prose prose-sm prose-slate dark:prose-invert max-w-none prose-p:my-1 prose-p:leading-relaxed prose-pre:bg-slate-950 dark:prose-pre:bg-black/40 prose-pre:border prose-pre:border-slate-800 prose-pre:rounded-xl prose-pre:p-3 prose-code:text-indigo-600 dark:prose-code:text-indigo-400 prose-code:bg-slate-100 dark:prose-code:bg-slate-850 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-ul:my-2 prose-li:my-0.5"
-                v-html="marked.parse(msg.content)"
-              ></div>
+              <!-- Action buttons under assistant message -->
+              <div v-if="msg.content !== ''" class="claude-message-actions">
+                <button @click="copyToClipboard(msg.content)" class="claude-action-btn" title="Copy response">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                </button>
+                <button class="claude-action-btn" title="Thumbs up">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" /></svg>
+                </button>
+                <button class="claude-action-btn" title="Thumbs down">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm12-5v9" /></svg>
+                </button>
+              </div>
             </div>
           </div>
         </template>
 
-        <!-- Sources bar (after last assistant reply) -->
+        <!-- Sources bar -->
         <div
           v-if="!isLoading && lastSources.length > 0 && chatHistory.length > 1"
           class="w-full max-w-3xl flex items-center gap-2 flex-wrap pb-4 animate-slide-up"
         >
-          <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Sources:</span>
+          <span class="text-[9px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Sources:</span>
           <div
             v-for="src in lastSources"
             :key="src"
-            class="text-[11px] font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 px-3 py-0.5 rounded-full shadow-sm"
+            class="text-[11px] font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 px-3.5 py-0.5 rounded-full shadow-sm"
           >
             {{ src }}
           </div>
         </div>
       </div>
 
-      <!-- Input footer -->
-      <footer class="p-4 bg-transparent w-full pb-8">
+      <!-- Input footer (Claude Dual-Row Pill Box) -->
+      <footer class="p-5 bg-transparent w-full pb-6 shrink-0 relative">
+        <!-- Floating scroll-down helper button -->
+        <button v-if="showScrollDown" @click="scrollToBottom" class="scroll-down-btn animate-fade-in" title="Scroll to bottom">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9" /></svg>
+        </button>
+
         <form @submit.prevent="sendMessage" class="max-w-3xl mx-auto w-full">
-          <div class="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 focus-within:ring-2 focus-within:ring-indigo-500/15 focus-within:border-indigo-500/60 rounded-2xl shadow-sm px-4.5 py-2.5 flex items-center transition-all duration-200">
-            <input
+          <div class="claude-input-container">
+            <!-- Top Text input area -->
+            <textarea
               v-model="message"
-              type="text"
-              :placeholder="ragAvailable && hasIndexedFiles ? 'Ask about your documents…' : 'Type a message…'"
-              class="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[13.5px] placeholder-slate-400 dark:placeholder-slate-500 text-slate-800 dark:text-slate-100 font-medium py-1 disabled:opacity-50"
+              rows="1"
+              :placeholder="ragAvailable && hasIndexedFiles ? 'Ask about your documents…' : 'Write a message…'"
+              class="claude-input-textarea"
+              @keydown.enter.prevent="sendMessage"
               :disabled="isLoading"
-            />
+            ></textarea>
             
-            <button
-              type="submit"
-              class="p-2 rounded-xl transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-sm hover:shadow"
-              :class="message.trim() && !isLoading
-                ? 'bg-indigo-600 dark:bg-indigo-500 text-white hover:bg-indigo-500 dark:hover:bg-indigo-400 active:scale-95'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-default'"
-              :disabled="!message.trim() || isLoading"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="19" x2="12" y2="5" />
-                <polyline points="5 12 12 5 19 12" />
-              </svg>
-            </button>
+            <!-- Bottom Row containing tools -->
+            <div class="claude-input-toolbar">
+              <div class="flex items-center gap-1">
+                <!-- Plus button -->
+                <button type="button" class="chrome-btn text-slate-400 hover:text-slate-800 dark:hover:text-slate-200" title="Attach content">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                </button>
+              </div>
+              
+              <div class="flex items-center gap-3.5">
+                <!-- Active Model Info -->
+                <span class="text-[11px] font-bold text-slate-400 dark:text-slate-550 select-none leading-none">{{ selectedModel }}</span>
+                
+
+
+                <!-- Send button inside toolbar -->
+                <button
+                  type="submit"
+                  class="p-1 rounded-lg transition-all flex items-center justify-center cursor-pointer active:scale-95 ml-1"
+                  :class="message.trim() && !isLoading
+                    ? 'text-slate-850 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    : 'text-slate-300 dark:text-slate-700'"
+                  :disabled="!message.trim() || isLoading"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="transform rotate-90">
+                    <line x1="22" y1="2" x2="11" y2="13" /><polyline points="22 2 15 22 11 13 2 9 22 2" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Legal disclaimer -->
+          <div class="text-center mt-2">
+            <span class="text-[11px] font-medium text-slate-400 dark:text-slate-650">
+              PD Checker is AI and can make mistakes. Please double-check responses.
+            </span>
           </div>
         </form>
       </footer>
@@ -720,14 +644,9 @@ watch(chatHistory, scrollToBottom, { deep: true });
 </template>
 
 <style>
-/* Override tailwind default input outline */
-input:focus {
+/* Override default input focus ring outline */
+input:focus, textarea:focus {
   outline: none !important;
   box-shadow: none !important;
-}
-
-/* User chat bubble specific custom color */
-.bg-indigo-650 {
-  background-color: #4f46e5;
 }
 </style>
