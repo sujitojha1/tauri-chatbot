@@ -1,146 +1,113 @@
 # AI-Based PD Checker
 
-A local-first desktop chatbot with RAG (Retrieval-Augmented Generation) built on Tauri, Vue 3, and a Python FastAPI backend. All AI inference and document processing runs entirely on your machine — no cloud, no telemetry.
+A local-first engineering desktop application for auditing Product Design (PD) specifications, built on **Tauri**, **Vue 3**, and a **Python FastAPI RAG (Retrieval-Augmented Generation)** backend. All AI inference, document parsing, and database transactions run entirely locally on your machine.
 
-## Features
+---
 
-- **Local AI chat** — streams responses from any model running in [Ollama](https://ollama.com/) (default: `gemma4:e2b`)
-- **RAG document chat** — ingest PDFs, DOCX, PPTX, XLSX, HTML, and plain text files; ask questions grounded in their content
-- **Two-tier knowledge base** — upload files to the persistent *Global* store or to a temporary *Session* (discarded on restart)
-- **Document pipeline** — parse → chunk → embed → upsert into Qdrant, with live status updates in the sidebar
-- **Embeddings via Ollama** — uses `nomic-embed-text` (768-dim, no separate model download beyond `ollama pull nomic-embed-text`)
-- **Markdown rendering** — full prose rendering of assistant replies including code blocks and lists
-- **Privacy first** — everything stays on `localhost`; no data leaves the machine
+## 🚀 Key Features
 
-## Architecture
+* **Specs Workspace (File-Scoped RAG Chat)**: Upload global engineering specifications and chat directly with any chosen file. Search queries and context snippets are strictly filtered to the active file bounds.
+* **Session Workspace (Compliance Review Dashboard)**:
+  * Upload session-specific documents (drawings, parameter list drafts).
+  * Run a structured **PD Evaluation Review** with a single click.
+  * Generates compliance status tables mapping parameters, requirements, and compliance flags.
+  * Unlocks interactive follow-up chat immediately after evaluation is complete.
+* **Multi-Session Lifecycle**: Create, switch, and delete review contexts. Chat histories, review states, active selections, and session-specific files are cached and persisted locally.
+* **Robust Local Ingestion Pipeline**:
+  * Seamless fallback: Ingests documents using Docker Qdrant, or falls back to an embedded local disk client if Docker is offline.
+  * Multi-format support: Parses PDFs (using structured layout conversions), DOCX, PPTX, XLSX, HTML, and text.
+  * Clean Database namespaces: Automatically sanitizes collection namespaces to meet strict database schemas.
+* **Privacy First & Open-Source**: Zero cloud trackers, telemetry, or API tokens required. Everything stays on `localhost`.
+
+---
+
+## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│  Tauri Desktop App (Rust shell)         │
-│  ┌───────────────────────────────────┐  │
-│  │  Vue 3 + Vite frontend            │  │
-│  │  - Chat UI / sidebar              │  │
-│  │  - Streams from Ollama directly   │  │
-│  │  - Calls RAG backend for queries  │  │
-│  └───────────────────────────────────┘  │
-└─────────────────────────────────────────┘
-         │ HTTP (localhost:8000)
-┌────────▼────────────────────────────────┐
-│  FastAPI RAG Backend (Python 3.11)      │
-│  - /ingest   → parse, chunk, embed      │
-│  - /files    → list, delete, SSE status │
-│  - /query/chat → retrieve + LLM stream  │
-│  - SQLite (rag.db) for file metadata    │
-└────────┬────────────────────────────────┘
-         │
-┌────────▼──────────┐   ┌─────────────────┐
-│  Qdrant (Docker)  │   │  Ollama          │
-│  localhost:6333   │   │  localhost:11434  │
-│  Vector store     │   │  LLM + embeddings│
-└───────────────────┘   └─────────────────┘
+┌──────────────────────────────────────────┐
+│  Tauri Desktop Application (Rust Shell)  │
+│  ┌────────────────────────────────────┐  │
+│  │  Vue 3 + Vite Frontend (UI View)    │  │
+│  │  - Specs & Sessions Workspaces     │  │
+│  │  - Local Storage Session Caching    │  │
+│  │  - Streams directly from Ollama     │  │
+│  └────────────────────────────────────┘  │
+└──────────────────────────────────────────┘
+          │ HTTP (localhost:8000)
+┌─────────▼────────────────────────────────┐
+│  FastAPI RAG Backend (Python 3.11)       │
+│  - /ingest     → Parse, chunk, embed     │
+│  - /files      → SSE Status & management │
+│  - /query/chat → File-scoped retrieve    │
+│  - SQLite (rag.db) metadata catalog      │
+└─────────┬────────────────────────────────┘
+          │
+┌─────────▼───────────┐   ┌──────────────────┐
+│  Qdrant Database    │   │  Ollama Engine   │
+│  (Docker / SQLite)  │   │  (Local Models)  │
+│  Vector storage     │   │  LLM + Embeddings│
+└─────────────────────┘   └──────────────────┘
 ```
 
-## Prerequisites
+---
+
+## 🛠️ Prerequisites
 
 | Dependency | Version | Notes |
 |---|---|---|
-| [Rust](https://www.rust-lang.org/tools/install) | stable | Required by Tauri |
-| [Bun](https://bun.sh/) | 1.1+ | Package manager and frontend runtime |
-| [Python](https://python.org/) | 3.11+ | RAG backend |
-| [Docker](https://www.docker.com/) | any | Runs Qdrant |
-| [Ollama](https://ollama.com/) | any | LLM + embeddings |
+| **Rust** | Stable | Compiles the Tauri Rust host wrapper |
+| **Bun** (or Node) | 1.1+ | Package manager and vite build runner |
+| **Python** | 3.11+ | Powering the RAG FastAPI backend service |
+| **Ollama** | Latest | Running local LLM and embedding models |
+| **Docker** | Optional | Runs the Qdrant container (local fallback mode runs on SQLite if offline) |
 
-Pull the required Ollama models once:
-
+Before starting, pull the local models in Ollama:
 ```bash
-ollama pull gemma4:e2b          # or any chat model
-ollama pull nomic-embed-text    # embeddings (required for RAG)
+ollama pull gemma4:e2b          # Default LLM
+ollama pull nomic-embed-text    # Embeddings model (required for RAG)
 ```
 
-## Getting Started
+---
 
-### 1. Start the RAG backend
+## 🏁 Getting Started
 
-On Linux/macOS (Bash):
-```bash
-cd backend
-./start.sh
-```
+### 1. Start the RAG Backend
 
-On Windows (PowerShell):
+Navigate into the `backend` folder and start the automated server wrapper:
+
+**On Windows (PowerShell)**:
 ```powershell
 cd backend
 .\start.ps1
 ```
 
-This will:
-- Create a Python virtual environment and install dependencies
-- Detect if Docker is running; if so, it spins up the Qdrant container. If Docker is offline, the backend seamlessly falls back to a **local SQLite-backed Qdrant engine** (no Docker required!)
-- Start the FastAPI server on `http://localhost:8000`
+**On Linux/macOS (Shell)**:
+```bash
+cd backend
+chmod +x start.sh
+./start.sh
+```
 
-API docs are available at `http://localhost:8000/docs`.
+This installs Python dependencies inside a local `.venv` environment, configures metadata databases, launches local/remote vector engines, and binds FastAPI to `http://localhost:8000`.
 
-### 2. Start the desktop app
+### 2. Start the Desktop client
 
-In a separate terminal from the project root:
+In a separate terminal at the project root directory:
 
 ```bash
+# Install frontend node modules
 bun install
+
+# Run the Tauri application dev client
 bun run tauri dev
 ```
 
-### Building for production
+---
 
-```bash
-bun run tauri build
-```
+## 📂 Configuration
 
-The packaged app (`.dmg` / `.app` on macOS) will be in `src-tauri/target/release/bundle/`.
+Customize models, chunk overlaps, and index ports inside [backend/config.py](backend/config.py):
 
-## Using the App
-
-**Without RAG backend:** The chat connects directly to Ollama and works as a standard local AI assistant.
-
-**With RAG backend running:**
-
-1. Open the sidebar and use the **Add** button in the **Global** section to ingest documents that persist across sessions, or the **Add** button in the **Session** section for temporary files.
-2. Files are parsed, chunked, and embedded automatically. A status indicator shows progress (`parsing → chunking → indexed`).
-3. Once at least one file is indexed, the **RAG** pill appears in the header — all queries are now grounded in your documents.
-
-## Project Structure
-
-```
-├── src/                    # Vue 3 frontend
-│   ├── App.vue             # Main UI component
-│   ├── ollama.ts           # Direct Ollama chat streaming
-│   ├── rag.ts              # RAG backend API client
-│   └── styles.css          # Tailwind + theme config
-├── src-tauri/              # Tauri / Rust shell
-├── backend/                # Python FastAPI RAG backend
-│   ├── main.py             # App entry point
-│   ├── config.py           # Ports, model names, chunk sizes
-│   ├── routers/
-│   │   ├── ingest.py       # File upload endpoint
-│   │   ├── files.py        # File list / delete / SSE status
-│   │   └── query.py        # RAG chat endpoint
-│   ├── services/
-│   │   ├── vector_store.py # Qdrant wrapper
-│   │   └── embedder.py     # Ollama embedding calls
-│   ├── workers/
-│   │   └── processor.py    # Parse → chunk → embed pipeline
-│   ├── requirements.txt
-│   └── start.sh            # One-command startup script
-```
-
-## Configuration
-
-Edit [backend/config.py](backend/config.py) to change defaults:
-
-| Setting | Default | Description |
-|---|---|---|
-| `EMBEDDING_MODEL` | `nomic-embed-text:latest` | Ollama embedding model |
-| `EMBEDDING_DIM` | `768` | Must match the model's output dimension |
-| `OLLAMA_DEFAULT_MODEL` | `gemma4:e2b` | Default chat model |
-| `CHUNK_SIZE` | `512` | Tokens per chunk |
-| `CHUNK_OVERLAP` | `64` | Overlap between consecutive chunks |
-| `QDRANT_PORT` | `6333` | Qdrant HTTP port |
+* `EMBEDDING_MODEL`: The Ollama model name used to encode document chunks (default: `nomic-embed-text:latest`).
+* `CHUNK_SIZE`: Token length constraint per text segment (default: `512`).
+* `OLLAMA_DEFAULT_MODEL`: The LLM model utilized in direct and retrieval-augmented streams (default: `gemma4:e2b`).
