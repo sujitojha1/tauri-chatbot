@@ -47,6 +47,12 @@ export async function deleteFile(fileId: string): Promise<void> {
   if (!res.ok) throw new Error(await res.text());
 }
 
+/** Re-run the ingestion pipeline for a file already uploaded (e.g. after a failure). */
+export async function reprocessFile(fileId: string): Promise<void> {
+  const res = await fetch(`${RAG_URL}/ingest/${fileId}/reprocess`, { method: "POST" });
+  if (!res.ok) throw new Error(await res.text());
+}
+
 // ── File listing ──────────────────────────────────────────────────────────────
 
 export async function listFiles(context: string): Promise<RagFile[]> {

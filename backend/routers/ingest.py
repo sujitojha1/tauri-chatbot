@@ -65,6 +65,38 @@ async def upload_file(
     }
 
 
+@router.post("/{file_id}/reprocess")
+async def reprocess_file(file_id: str, background_tasks: BackgroundTasks):
+    """
+    Re-run the ingestion pipeline for a file already on disk.
+    Useful when processing failed or never completed. Existing vectors are
+    cleared first to avoid duplicates.
+    """
+    record = await db.get_file(file_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    dest_dir = UPLOAD_DIR / file_id
+    dest_path = dest_dir / record["filename"]
+    if not dest_path.exists():
+        # Fall back to whatever single file is stored in the folder
+        candidates = list(dest_dir.glob("*")) if dest_dir.exists() else []
+        if not candidates:
+            raise HTTPException(status_code=404, detail="Uploaded file missing on disk")
+        dest_path = candidates[0]
+
+    # Clear any partial vectors before re-indexing
+    from services import vector_store
+    vector_store.delete_file_vectors(record["context"], file_id)
+
+    await db.update_status(file_id, "pending", error=None)
+    background_tasks.add_task(
+        process_file, file_id, dest_path, record["context"], record["filename"]
+    )
+
+    return {"file_id": file_id, "status": "pending"}
+
+
 @router.delete("/{file_id}")
 async def delete_file(file_id: str):
     """Remove file record, uploaded file, and all its vectors from Qdrant."""

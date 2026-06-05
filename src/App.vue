@@ -4,6 +4,7 @@ import { chatStream, getModels, type ChatMessage } from "./ollama";
 import {
   uploadFile,
   deleteFile,
+  reprocessFile,
   listFiles,
   watchFileStatus,
   ragChatStream,
@@ -216,13 +217,6 @@ const hasIndexedFiles = computed(
     sessionFiles.value.some((f) => f.status === "indexed")
 );
 
-const allFiles = computed(() => {
-  const unique = new Map<string, RagFile>();
-  globalFiles.value.forEach(f => unique.set(f.id, f));
-  sessionFiles.value.forEach(f => unique.set(f.id, f));
-  return Array.from(unique.values());
-});
-
 async function handleDeleteFileUnified(file: RagFile) {
   watchers[file.id]?.();
   delete watchers[file.id];
@@ -234,6 +228,77 @@ async function handleDeleteFileUnified(file: RagFile) {
   globalFiles.value = globalFiles.value.filter((f) => f.id !== file.id);
   sessionFiles.value = sessionFiles.value.filter((f) => f.id !== file.id);
   
+  if (selectedSpecFile.value && selectedSpecFile.value.id === file.id) {
+    selectedSpecFile.value = null;
+  }
+}
+
+// Re-run ingestion for a file that failed or never finished processing.
+async function handleReprocessFile(file: RagFile, type: "global" | "session") {
+  try {
+    await reprocessFile(file.id);
+  } catch (e) {
+    console.error("Reprocess failed:", e);
+    return;
+  }
+  // Optimistically reflect the pending state and (re)attach a status watcher.
+  const patch = (f: RagFile): RagFile => ({
+    ...f,
+    status: "pending",
+    error: null,
+    total_chunks: null,
+  });
+  if (type === "global") {
+    globalFiles.value = globalFiles.value.map((f) => (f.id === file.id ? patch(f) : f));
+  } else {
+    sessionFiles.value = sessionFiles.value.map((f) => (f.id === file.id ? patch(f) : f));
+  }
+  watchers[file.id]?.();
+  delete watchers[file.id];
+  startWatcher({ ...file, status: "pending" }, type);
+}
+
+// Open a file in the dedicated spec-chat view (works for global or session files).
+function openFileChat(file: RagFile) {
+  if (file.status !== "indexed") return;
+  selectedSpecFile.value = file;
+  activeTab.value = "rag";
+}
+
+// Reprocess a file that belongs to a specific session (Session tab list).
+async function reprocessSessionFile(sessionId: string, file: RagFile) {
+  try {
+    await reprocessFile(file.id);
+  } catch (e) {
+    console.error("Reprocess failed:", e);
+    return;
+  }
+  const patch = (f: RagFile): RagFile => ({
+    ...f,
+    status: "pending",
+    error: null,
+    total_chunks: null,
+  });
+  const sess = sessions.value.find((s) => s.id === sessionId);
+  if (sess) sess.files = sess.files.map((f) => (f.id === file.id ? patch(f) : f));
+  sessionFiles.value = sessionFiles.value.map((f) => (f.id === file.id ? patch(f) : f));
+  watchers[file.id]?.();
+  delete watchers[file.id];
+  startWatcher({ ...file, status: "pending" }, "session");
+}
+
+// Delete a file that belongs to a specific session (Session tab list).
+async function deleteSessionFile(sessionId: string, file: RagFile) {
+  watchers[file.id]?.();
+  delete watchers[file.id];
+  try {
+    await deleteFile(file.id);
+  } catch (e) {
+    console.error("Delete call failed:", e);
+  }
+  const sess = sessions.value.find((s) => s.id === sessionId);
+  if (sess) sess.files = sess.files.filter((f) => f.id !== file.id);
+  sessionFiles.value = sessionFiles.value.filter((f) => f.id !== file.id);
   if (selectedSpecFile.value && selectedSpecFile.value.id === file.id) {
     selectedSpecFile.value = null;
   }
@@ -628,6 +693,17 @@ watch(selectedSpecFile, (newFile) => {
       <div class="orange-glow"></div>
     </div>
 
+    <!-- Expand toggle — anchored to the same spot as the sidebar's menu button so it never shifts -->
+    <button
+      v-if="sidebarCollapsed"
+      @click="sidebarCollapsed = false"
+      class="chrome-btn absolute z-30"
+      style="top: 14px; left: 16px;"
+      title="Expand sidebar"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+
     <!-- ── Left Sidebar (Claude Flat Panel) ──────────────────────────────────── -->
     <aside :class="sidebarCollapsed ? '!w-0 !p-0 !border-r-0 overflow-hidden opacity-0 pointer-events-none' : 'w-[260px]'" class="claude-sidebar hidden md:flex flex-col z-10 transition-all duration-300">
       
@@ -721,19 +797,39 @@ watch(selectedSpecFile, (newFile) => {
                 </div>
               </div>
 
-              <!-- Uploaded files for this session -->
+              <!-- Uploaded files for this session — click an indexed file to review/chat -->
               <div v-if="session.files && session.files.length > 0" class="flex flex-col gap-0.5 pl-3.5 mt-0.5">
                 <div
                   v-for="file in session.files"
                   :key="file.id"
-                  class="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 py-0.5 px-1.5 rounded-md"
-                  :title="file.filename"
+                  class="group/file flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 py-0.5 px-1.5 rounded-md hover:bg-slate-100/70 dark:hover:bg-slate-800/40 transition-colors"
+                  :class="file.status === 'indexed' ? 'cursor-pointer hover:text-slate-700 dark:hover:text-slate-200' : 'cursor-default'"
+                  :title="file.status === 'indexed' ? `Chat with ${file.filename}` : (file.error || file.filename)"
+                  @click.stop="openFileChat(file)"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 text-slate-400 dark:text-slate-500">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
                   </svg>
                   <span class="truncate flex-1 min-w-0">{{ file.filename }}</span>
-                  <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusDot(file.status)"></span>
+
+                  <!-- Retry processing (only when not indexed) -->
+                  <button
+                    v-if="file.status !== 'indexed'"
+                    @click.stop="reprocessSessionFile(session.id, file)"
+                    class="opacity-0 group-hover/file:opacity-100 p-0.5 rounded text-slate-400 hover:text-amber-500 transition-all shrink-0"
+                    title="Retry processing"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>
+                  </button>
+                  <!-- Delete -->
+                  <button
+                    @click.stop="deleteSessionFile(session.id, file)"
+                    class="opacity-0 group-hover/file:opacity-100 p-0.5 rounded text-slate-400 hover:text-rose-500 transition-all shrink-0"
+                    title="Remove file"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
+                  </button>
+                  <span class="w-1.5 h-1.5 rounded-full shrink-0 group-hover/file:hidden" :class="statusDot(file.status)"></span>
                 </div>
               </div>
             </div>
@@ -756,13 +852,13 @@ watch(selectedSpecFile, (newFile) => {
 
           <div class="mx-3 my-1.5 border-t border-slate-200/60 dark:border-slate-800/60"></div>
           
-          <!-- Files List in Specs Sidebar (global + current session) -->
+          <!-- Files List in Specs Sidebar (global specs only) -->
           <div class="recents-title !pt-0">Files</div>
           <div class="space-y-0.5 overflow-y-auto min-h-0 flex-1 px-1">
             <div
-              v-for="file in allFiles"
+              v-for="file in globalFiles"
               :key="file.id"
-              class="claude-history-item group relative flex items-center justify-between !my-0.5 cursor-pointer"
+              class="claude-history-item group flex items-center justify-between gap-1 !my-0.5 cursor-pointer"
               :class="{ 'active': selectedSpecFile && selectedSpecFile.id === file.id }"
               @click="selectedSpecFile = file"
             >
@@ -770,23 +866,32 @@ watch(selectedSpecFile, (newFile) => {
                 <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-455 dark:text-slate-500 shrink-0">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
                 </svg>
-                <span class="truncate font-medium text-[12px]" :title="file.filename">{{ file.filename }}</span>
-                <span class="shrink-0 text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
-                  :class="file.context === 'global' ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'">
-                  {{ file.context === 'global' ? 'Global' : 'Review' }}
-                </span>
+                <span class="truncate font-medium text-[12px]" :title="file.error || file.filename">{{ file.filename }}</span>
               </div>
-              <span class="w-1.5 h-1.5 rounded-full shrink-0 mr-1" :class="statusDot(file.status)"></span>
-              <button
-                @click.stop="handleDeleteFileUnified(file)"
-                class="opacity-0 group-hover:opacity-100 hover:text-rose-500 text-slate-400 cursor-pointer p-0.5 rounded transition-all shrink-0 absolute right-2 bg-inherit"
-                title="Delete document"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></svg>
-              </button>
+
+              <!-- Status dot (hidden on hover to reveal actions) -->
+              <span class="w-1.5 h-1.5 rounded-full shrink-0 group-hover:hidden" :class="statusDot(file.status)"></span>
+              <!-- Hover actions -->
+              <div class="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                <button
+                  v-if="file.status !== 'indexed'"
+                  @click.stop="handleReprocessFile(file, 'global')"
+                  class="text-slate-400 hover:text-amber-500 cursor-pointer p-0.5 rounded transition-all"
+                  title="Retry processing"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>
+                </button>
+                <button
+                  @click.stop="handleDeleteFileUnified(file)"
+                  class="text-slate-400 hover:text-rose-500 cursor-pointer p-0.5 rounded transition-all"
+                  title="Delete document"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
+                </button>
+              </div>
             </div>
 
-            <div v-if="allFiles.length === 0" class="text-center py-8 text-[11.5px] text-slate-400 dark:text-slate-500 font-medium select-none">
+            <div v-if="globalFiles.length === 0" class="text-center py-8 text-[11.5px] text-slate-400 dark:text-slate-500 font-medium select-none">
               No specifications uploaded
             </div>
           </div>
@@ -811,12 +916,7 @@ watch(selectedSpecFile, (newFile) => {
 
       <!-- Dynamic Header -->
       <header class="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900/10 z-10 w-full transition-colors duration-300 shrink-0">
-        <div class="flex items-center gap-2 min-w-0 text-slate-800 dark:text-slate-100 hover:opacity-85 transition-all">
-          <!-- Hamburger to Expand sidebar when collapsed -->
-          <button v-if="sidebarCollapsed" @click="sidebarCollapsed = false" class="chrome-btn mr-1.5 shrink-0" title="Expand Sidebar">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-          </button>
-          
+        <div class="flex items-center gap-2 min-w-0 text-slate-800 dark:text-slate-100 hover:opacity-85 transition-all" :class="{ 'pl-9': sidebarCollapsed }">
           <span class="font-display font-extrabold text-sm tracking-wide flex items-center gap-2">
             <!-- Back button if in file-scoped chat -->
             <button v-if="activeTab === 'rag' && selectedSpecFile" @click="selectedSpecFile = null" class="mr-1 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500" title="Back to Database">
@@ -863,18 +963,31 @@ watch(selectedSpecFile, (newFile) => {
             <!-- Upload Specs inline area -->
             <div class="w-full bg-white dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 rounded-2xl p-4 text-left">
               <span class="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Specification files for this review</span>
-              <div v-if="allFiles.length > 0" class="mt-2 space-y-2">
-                <div v-for="file in allFiles" :key="file.id" class="flex items-center justify-between gap-2 text-xs py-1 border-b border-slate-100 dark:border-slate-800/50">
-                  <span class="truncate font-semibold text-slate-700 dark:text-slate-300 flex-1 min-w-0" :title="file.filename">{{ file.filename }}</span>
-                  <span class="shrink-0 text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
-                    :class="file.context === 'global' ? 'bg-indigo-500/10 text-indigo-500' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'">
-                    {{ file.context === 'global' ? 'Global' : 'Review' }}
-                  </span>
-                  <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusDot(file.status)"></span>
+              <div v-if="sessionFiles.length > 0" class="mt-2 space-y-2">
+                <div v-for="file in sessionFiles" :key="file.id" class="group flex items-center justify-between gap-2 text-xs py-1 border-b border-slate-100 dark:border-slate-800/50">
+                  <span class="truncate font-semibold text-slate-700 dark:text-slate-300 flex-1 min-w-0" :title="file.error || file.filename">{{ file.filename }}</span>
+                  <div class="flex items-center gap-1 shrink-0">
+                    <button
+                      v-if="file.status !== 'indexed'"
+                      @click="reprocessSessionFile(currentSessionId, file)"
+                      class="opacity-0 group-hover:opacity-100 p-1 rounded-md text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
+                      title="Retry processing"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>
+                    </button>
+                    <button
+                      @click="deleteSessionFile(currentSessionId, file)"
+                      class="opacity-0 group-hover:opacity-100 p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all"
+                      title="Remove file"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
+                    </button>
+                    <span class="w-1.5 h-1.5 rounded-full" :class="statusDot(file.status)"></span>
+                  </div>
                 </div>
               </div>
               <div v-else class="text-xs text-slate-400 dark:text-slate-500 py-4 text-center font-medium">
-                No spec files yet. Add them with the button below, or upload global specs in the Specs tab.
+                No spec files yet. Add them with the button below.
               </div>
 
               <!-- Upload button trigger -->
@@ -1022,12 +1135,12 @@ watch(selectedSpecFile, (newFile) => {
           <div class="w-full max-w-4xl animate-slide-up">
             <h1 class="font-display font-extrabold text-2xl text-slate-800 dark:text-slate-100 mb-2">Specifications Database</h1>
             <p class="text-xs font-semibold text-slate-450 dark:text-slate-500 mb-8">
-              Store global parameters and common guidelines, or load session-specific documents. Select a file to launch a direct chat.
+              Global specifications and common guidelines available to every review. Select a file to launch a direct chat.
             </p>
 
-            <!-- Grid listing of all specifications -->
-            <div v-if="allFiles.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div v-for="file in allFiles" :key="file.id" class="p-5 bg-slate-50/50 dark:bg-slate-900/10 border border-slate-200/50 dark:border-slate-800/50 rounded-2xl flex flex-col justify-between gap-4 hover:shadow-md transition-all">
+            <!-- Grid listing of global specifications -->
+            <div v-if="globalFiles.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div v-for="file in globalFiles" :key="file.id" class="p-5 bg-slate-50/50 dark:bg-slate-900/10 border border-slate-200/50 dark:border-slate-800/50 rounded-2xl flex flex-col justify-between gap-4 hover:shadow-md transition-all">
                 <div class="flex items-start gap-3.5">
                   <div class="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 shrink-0">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -1052,11 +1165,19 @@ watch(selectedSpecFile, (newFile) => {
                     Chat with Spec
                   </button>
                   <button
+                    v-if="file.status !== 'indexed'"
+                    @click="handleReprocessFile(file, 'global')"
+                    class="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/20 dark:hover:bg-amber-950/40 text-amber-600 dark:text-amber-400 transition-all cursor-pointer"
+                    title="Retry processing"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>
+                  </button>
+                  <button
                     @click="handleDeleteFileUnified(file)"
                     class="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-500 transition-all cursor-pointer"
                     title="Delete specification file"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
                   </button>
                 </div>
               </div>
@@ -1067,9 +1188,9 @@ watch(selectedSpecFile, (newFile) => {
               <div class="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mx-auto mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               </div>
-              <h3 class="text-sm font-bold text-slate-700 dark:text-slate-350">No specification documents loaded</h3>
+              <h3 class="text-sm font-bold text-slate-700 dark:text-slate-350">No global specifications loaded</h3>
               <p class="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">
-                Upload global specifications or session files to start running checker audits and reviews.
+                Upload global specifications here. For files specific to one review, use the Session tab.
               </p>
             </div>
           </div>
