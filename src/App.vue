@@ -50,6 +50,34 @@ const activeSession = computed(() => {
   return sessions.value.find((s) => s.id === currentSessionId.value) || null;
 });
 
+// ── Inline session-title editing (top header) ──────────────────────────────────
+const editingTitle = ref(false);
+const titleDraft = ref("");
+const titleInput = ref<HTMLInputElement | null>(null);
+
+function startEditTitle() {
+  if (!activeSession.value) return;
+  titleDraft.value = activeSession.value.title;
+  editingTitle.value = true;
+  nextTick(() => {
+    titleInput.value?.focus();
+    titleInput.value?.select();
+  });
+}
+
+function saveTitle() {
+  if (!editingTitle.value) return; // guard against blur firing after enter/escape
+  editingTitle.value = false;
+  const next = titleDraft.value.trim();
+  if (activeSession.value && next) {
+    activeSession.value.title = next;
+  }
+}
+
+function cancelEditTitle() {
+  editingTitle.value = false;
+}
+
 // ── Specs Chat State (Chatting with individual files) ──────────────────────────
 const FILE_CHAT_HISTORY_KEY = "pd-checker-file-chat-history";
 const FILE_LAST_SOURCES_KEY = "pd-checker-file-last-sources";
@@ -922,10 +950,35 @@ watch(selectedSpecFile, (newFile) => {
             <button v-if="activeTab === 'rag' && selectedSpecFile" @click="selectedSpecFile = null" class="mr-1 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500" title="Back to Database">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
             </button>
-            
-            {{ activeTab === 'rag' ? (selectedSpecFile ? `Chatting with Spec: ${selectedSpecFile.filename}` : 'Specifications Hub') : (activeSession ? activeSession.title : 'Review design') }}
+
+            <!-- Specs tab: static title -->
+            <template v-if="activeTab === 'rag'">
+              {{ selectedSpecFile ? `Chatting with Spec: ${selectedSpecFile.filename}` : 'Specifications Hub' }}
+            </template>
+
+            <!-- Session tab: click-to-edit title -->
+            <template v-else>
+              <input
+                v-if="editingTitle"
+                ref="titleInput"
+                v-model="titleDraft"
+                @keydown.enter.prevent="saveTitle"
+                @keydown.esc.prevent="cancelEditTitle"
+                @blur="saveTitle"
+                maxlength="80"
+                class="font-display font-extrabold text-sm tracking-wide bg-transparent border-b border-indigo-400 dark:border-indigo-500 outline-none px-0.5 py-0.5 min-w-[140px] max-w-[460px] text-slate-800 dark:text-slate-100"
+              />
+              <button
+                v-else
+                @click="startEditTitle"
+                class="group flex items-center gap-1.5 -mx-1 px-1 py-0.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-text"
+                title="Click to rename"
+              >
+                <span class="truncate max-w-[460px]">{{ activeSession ? activeSession.title : 'Review design' }}</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>
+              </button>
+            </template>
           </span>
-          <svg v-if="activeTab === 'chat'" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="ml-0.5 text-slate-400"><polyline points="6 9 12 15 18 9" /></svg>
           <span v-if="isLoading" class="ml-3 text-[9px] font-bold tracking-widest text-indigo-600 dark:text-indigo-400 uppercase animate-pulse">generating…</span>
         </div>
 
