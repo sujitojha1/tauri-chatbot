@@ -1131,16 +1131,21 @@ watch(selectedSpecFile, (newFile) => {
         </div>
 
         <!-- Case B: No file is selected (Landing Specs Hub Dashboard) -->
-        <div v-else class="flex-1 overflow-y-auto px-8 py-12 flex flex-col items-center">
-          <div class="w-full max-w-4xl animate-slide-up">
-            <h1 class="font-display font-extrabold text-2xl text-slate-800 dark:text-slate-100 mb-2">Specifications Database</h1>
-            <p class="text-xs font-semibold text-slate-450 dark:text-slate-500 mb-8">
-              Global specifications and common guidelines available to every review. Select a file to launch a direct chat.
-            </p>
+        <div v-else class="flex-1 overflow-y-auto px-8 py-8">
+          <div class="w-full max-w-5xl mx-auto animate-slide-up">
+            <!-- Compact intro row (the page title lives in the top header bar) -->
+            <div class="flex items-center justify-between gap-4 mb-6">
+              <p class="text-[13px] font-medium text-slate-500 dark:text-slate-400 max-w-xl">
+                Global reference documents shared across every review. Select a file to chat with it directly.
+              </p>
+              <span v-if="globalFiles.length" class="shrink-0 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                {{ globalFiles.length }} file{{ globalFiles.length === 1 ? '' : 's' }}
+              </span>
+            </div>
 
             <!-- Grid listing of global specifications -->
-            <div v-if="globalFiles.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div v-for="file in globalFiles" :key="file.id" class="p-5 bg-slate-50/50 dark:bg-slate-900/10 border border-slate-200/50 dark:border-slate-800/50 rounded-2xl flex flex-col justify-between gap-4 hover:shadow-md transition-all">
+            <div v-if="globalFiles.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div v-for="file in globalFiles" :key="file.id" class="p-4 bg-slate-50/50 dark:bg-slate-900/10 border border-slate-200/50 dark:border-slate-800/50 rounded-2xl flex flex-col justify-between gap-4 hover:shadow-md transition-all">
                 <div class="flex items-start gap-3.5">
                   <div class="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 shrink-0">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
