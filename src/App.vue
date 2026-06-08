@@ -451,7 +451,7 @@ const sendMessage = async () => {
   }
 };
 
-// ── Run Compliance / design checklist review ──────────────────────────────────
+// ── Run design review (two checks: QAD mention + part list text vs drawing) ────
 const runSessionReview = async () => {
   const activeSess = sessions.value.find(s => s.id === currentSessionId.value);
   if (!activeSess || isLoading.value) return;
@@ -460,8 +460,20 @@ const runSessionReview = async () => {
   chatHistory.value = [];
   lastSources.value = [];
 
-  const reviewPrompt = "Perform a thorough design compliance audit of the uploaded specifications. Cross-reference metrics, highlight gaps, and structure your findings in a detailed evaluation table listing Parameters, Requirements, and compliance status.";
-  chatHistory.value.push({ id: Date.now(), role: "user", content: "Analyze specification compliance and generate the PD Evaluation Report." });
+  const reviewPrompt = [
+    "Perform exactly TWO checks on the uploaded specifications and drawing. Do not perform any other checks.",
+    "",
+    "Check 1 — QAD mention: Verify that \"QAD\" is mentioned in the drawing.",
+    "Check 2 — Part list consistency: Verify that the part list entry in the text matches the part list entry in the drawing.",
+    "",
+    "Report ONLY the status of these two checks as a single Markdown table and output nothing else — no introduction, no explanation, no extra sections.",
+    "Use exactly these columns: Check #, Description, Status.",
+    "In the Status column write \"✓ Check passed\" when the check passes and \"✗ Failed\" when it fails.",
+    "",
+    "| Check # | Description | Status |",
+    "|---------|-------------|--------|",
+  ].join("\n");
+  chatHistory.value.push({ id: Date.now(), role: "user", content: "Run the two design checks and report the status table." });
 
   const assistantId = Date.now() + 1;
   chatHistory.value.push({ id: assistantId, role: "assistant", content: "" });
