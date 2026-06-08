@@ -535,10 +535,11 @@ function createNewSession() {
     created_at: Date.now()
   };
   sessions.value.unshift(newSession);
+  // Just switch the active session — the currentSessionId watcher saves the
+  // outgoing session (with its real history intact) and loads the new empty one.
+  // Resetting chatHistory/lastSources/sessionFiles here would run BEFORE that
+  // watcher and cause it to overwrite the previous session's history with [].
   currentSessionId.value = newId;
-  chatHistory.value = [];
-  lastSources.value = [];
-  sessionFiles.value = [];
 }
 
 async function deleteSession(id: string) {
