@@ -795,8 +795,18 @@ watch(selectedSpecFile, (newFile) => {
                 class="claude-history-item group relative flex items-center justify-between !mx-0 !my-0 cursor-pointer"
                 :class="{ 'active': currentSessionId === session.id }"
               >
-                <span class="truncate font-semibold text-[13px] select-none pr-6">
-                  {{ session.title }}
+                <span class="flex items-center gap-1 truncate pr-6 min-w-0">
+                  <!-- Expand/collapse chevron — only shown when the session has files to reveal -->
+                  <svg
+                    v-if="session.files && session.files.length > 0"
+                    xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="2.5"
+                    class="shrink-0 text-slate-400 dark:text-slate-500 transition-transform duration-200"
+                    :class="{ 'rotate-90': currentSessionId === session.id }"
+                  ><polyline points="9 18 15 12 9 6" /></svg>
+                  <span class="truncate font-semibold text-[13px] select-none">
+                    {{ session.title }}
+                  </span>
                 </span>
 
                 <!-- Three-dot options trigger -->
@@ -825,8 +835,8 @@ watch(selectedSpecFile, (newFile) => {
                 </div>
               </div>
 
-              <!-- Uploaded files for this session — click an indexed file to review/chat -->
-              <div v-if="session.files && session.files.length > 0" class="flex flex-col gap-0.5 pl-3.5 mt-0.5">
+              <!-- Uploaded files — expanded only for the selected session (accordion); others collapse -->
+              <div v-if="currentSessionId === session.id && session.files && session.files.length > 0" class="flex flex-col gap-0.5 pl-3.5 mt-0.5">
                 <div
                   v-for="file in session.files"
                   :key="file.id"
