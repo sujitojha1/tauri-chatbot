@@ -8,8 +8,8 @@ python-multipart>=0.0.9
 # Async SQLite
 aiosqlite>=0.20.0
 
-# Document parsing (PDF, DOCX, PPTX, HTML, XLSX)
-docling>=2.0.0
+# Document parsing — markdown text + page image rendering (PDF, DOCX, images, …)
+liteparse>=2.0.0
 
 # Chunking
 langchain-text-splitters>=0.2.0
