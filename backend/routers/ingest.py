@@ -25,7 +25,10 @@ async def upload_file(
     Upload a document and kick off the async ingestion pipeline.
     Returns immediately with file_id and status="pending".
     """
-    allowed = {".pdf", ".docx", ".txt", ".md", ".html", ".pptx", ".xlsx"}
+    allowed = {
+        ".pdf", ".docx", ".txt", ".md", ".html", ".pptx", ".xlsx",
+        ".png", ".jpg", ".jpeg", ".webp",  # drawings/scans for the vision path
+    }
     suffix = Path(file.filename).suffix.lower()
     if suffix not in allowed:
         raise HTTPException(
@@ -104,9 +107,10 @@ async def delete_file(file_id: str):
     if not record:
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Remove vectors
-    from services import vector_store
+    # Remove vectors (RAG files) and derived assets (session files)
+    from services import vector_store, session_store
     vector_store.delete_file_vectors(record["context"], file_id)
+    session_store.delete(file_id)
 
     # Remove uploaded file from disk
     dest_dir = UPLOAD_DIR / file_id

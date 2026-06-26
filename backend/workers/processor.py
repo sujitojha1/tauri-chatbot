@@ -1,6 +1,16 @@
 """
-Async background job: parse → chunk → embed → upsert.
-Runs via FastAPI BackgroundTasks (no Redis/Celery needed).
+Async background ingestion job.
+
+Two pipelines, chosen by upload context:
+
+  * session:<id>  → liteparse the **first page** into markdown + a page image,
+    stashed on disk for direct (non-RAG) consumption by the vision model.
+  * everything else → liteparse the full document → chunk → embed → upsert to
+    Qdrant for retrieval-augmented chat.
+
+Runs via FastAPI BackgroundTasks (no Redis/Celery needed). CPU-bound parsing
+and embedding run in the default thread pool to keep the event loop free
+(REQ-NFR-02).
 """
 import asyncio
 import logging
@@ -8,65 +18,61 @@ from pathlib import Path
 
 from config import CHUNK_SIZE, CHUNK_OVERLAP
 from models import db
+from services import parsing, session_store, vector_store
 from services.embedder import embed_texts
-from services import vector_store
 
 logger = logging.getLogger(__name__)
 
 
 async def process_file(file_id: str, path: Path, context: str, filename: str):
-    """
-    Pipeline:
-      1. Parse with docling (runs in thread pool to avoid blocking event loop)
-      2. Chunk with langchain RecursiveCharacterTextSplitter
-      3. Embed with sentence-transformers
-      4. Upsert to Qdrant
-    """
     await db.update_status(file_id, "processing")
-    logger.info(f"[{file_id}] Starting processing: {filename}")
+    logger.info(f"[{file_id}] Starting processing: {filename} (context={context})")
 
     try:
-        # --- Step 1: Parse (CPU-bound, run in thread pool) ---
-        raw_text = await asyncio.get_event_loop().run_in_executor(
-            None, _parse_document, path
-        )
-        logger.info(f"[{file_id}] Parsed {len(raw_text)} chars")
-
-        # --- Step 2: Chunk ---
-        chunks = _chunk_text(raw_text)
-        logger.info(f"[{file_id}] Created {len(chunks)} chunks")
-        await db.update_status(file_id, "chunked", total_chunks=len(chunks))
-
-        # --- Step 3 & 4: Embed + upsert (batched, in thread pool) ---
-        await asyncio.get_event_loop().run_in_executor(
-            None, _embed_and_upsert, file_id, filename, context, chunks
-        )
-
-        await db.update_status(file_id, "indexed", total_chunks=len(chunks))
-        logger.info(f"[{file_id}] Indexed successfully")
-
-    except Exception as e:
+        if context.startswith("session:"):
+            await _process_session_file(file_id, path)
+        else:
+            await _process_rag_file(file_id, path, context, filename)
+    except Exception as e:  # noqa: BLE001 - surface any failure to the UI
         logger.exception(f"[{file_id}] Processing failed")
         await db.update_status(file_id, "failed", error=str(e))
 
 
+# ── Session pipeline: first page → markdown + image for the VLM ───────────────
+
+async def _process_session_file(file_id: str, path: Path):
+    loop = asyncio.get_event_loop()
+    markdown, image_b64 = await loop.run_in_executor(
+        None, parsing.process_session_file, path
+    )
+    session_store.save(file_id, markdown, image_b64)
+    logger.info(
+        f"[{file_id}] Session assets ready (md={len(markdown)} chars, image={'yes' if image_b64 else 'no'})"
+    )
+    # No chunks/vectors for session files; mark ready so the UI can proceed.
+    await db.update_status(file_id, "indexed", total_chunks=1)
+
+
+# ── RAG pipeline: full document → chunks → embeddings → Qdrant ────────────────
+
+async def _process_rag_file(file_id: str, path: Path, context: str, filename: str):
+    loop = asyncio.get_event_loop()
+
+    raw_text = await loop.run_in_executor(None, parsing.parse_markdown, path)
+    logger.info(f"[{file_id}] Parsed {len(raw_text)} chars")
+
+    chunks = _chunk_text(raw_text)
+    logger.info(f"[{file_id}] Created {len(chunks)} chunks")
+    await db.update_status(file_id, "chunked", total_chunks=len(chunks))
+
+    await loop.run_in_executor(
+        None, _embed_and_upsert, file_id, filename, context, chunks
+    )
+    await db.update_status(file_id, "indexed", total_chunks=len(chunks))
+    logger.info(f"[{file_id}] Indexed successfully")
+
+
 # ── Sync helpers (run in thread pool) ─────────────────────────────────────────
-
-def _parse_document(path: Path) -> str:
-    """Use docling for structured parsing; fall back to plain text."""
-    suffix = path.suffix.lower()
-
-    try:
-        from docling.document_converter import DocumentConverter
-        converter = DocumentConverter()
-        result = converter.convert(str(path))
-        return result.document.export_to_markdown()
-    except Exception:
-        pass
-
-    # Plain text fallback
-    return path.read_text(errors="replace")
-
 
 def _chunk_text(text: str) -> list[str]:
     from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -76,7 +82,7 @@ def _chunk_text(text: str) -> list[str]:
         chunk_overlap=CHUNK_OVERLAP,
         separators=["\n\n", "\n", ". ", " ", ""],
     )
-    return splitter.split_text(text)
+    return [c for c in splitter.split_text(text) if c.strip()]
 
 
 def _embed_and_upsert(
@@ -86,6 +92,8 @@ def _embed_and_upsert(
     chunks: list[str],
     batch_size: int = 64,
 ):
+    if not chunks:
+        return
     all_vectors = []
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i : i + batch_size]
