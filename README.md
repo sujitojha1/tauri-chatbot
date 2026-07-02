@@ -68,6 +68,8 @@ ollama pull gemma4:e2b          # Default LLM
 ollama pull nomic-embed-text    # Embeddings model (required for RAG)
 ```
 
+
+
 ---
 
 ## 🏁 Getting Started
