@@ -40,3 +40,6 @@ This document outlines the step-by-step phased approach for building the minimal
 - [x] Add a persistent left-sidebar listing perfectly indexed knowledge base files.
 - [x] Route chat queries securely through LightRAG contextual engine when an ingested file is present.
 - [x] Detach backend from native Tauri `.app` packaging to support standalone Python process architecture.
+
+
+
