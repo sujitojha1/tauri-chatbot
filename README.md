@@ -5,8 +5,6 @@ A local-first engineering desktop application for auditing Product Design (PD) s
 ---
 
 
-
-
 ## 🚀 Key Features (change)
 
 * **Specs Workspace (File-Scoped RAG Chat)**: Upload global engineering specifications and chat directly with any chosen file. Search queries and context snippets are strictly filtered to the active file bounds.
