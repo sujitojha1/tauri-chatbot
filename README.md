@@ -51,8 +51,6 @@ A local-first engineering desktop application for auditing Product Design (PD) s
 ```
 
 
-
-
 ---
 
 ## 🛠️ Prerequisites
