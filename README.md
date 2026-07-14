@@ -20,6 +20,7 @@ A local-first engineering desktop application for auditing Product Design (PD) s
   * Clean Database namespaces: Automatically sanitizes collection namespaces to meet strict database schemas.
 * **Privacy First & Open-Source**: Zero cloud trackers, telemetry, or API tokens required. Everything stays on `localhost`.
 
+
 ---
 
 ## 🏗️ Architecture
